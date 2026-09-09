@@ -225,5 +225,23 @@ def summary():
         session.close()
 
 
+@app.command()
+def serve(
+    host: str = typer.Option("127.0.0.1", "--host", "-h", help="Host interface to bind to"),
+    port: int = typer.Option(8000, "--port", "-p", help="Port to listen on"),
+    reload: bool = typer.Option(True, "--reload", help="Enable auto-reload on code changes"),
+):
+    """Start the Jnaara FastAPI REST API server."""
+    try:
+        import uvicorn
+    except ImportError:
+        console.print("[bold red]Error:[/bold red] uvicorn is not installed. Run 'uv sync --extra api'.")
+        raise typer.Exit(1)
+
+    console.print(f"[bold green]Starting Jnaara API server at[/bold green] [cyan]http://{host}:{port}[/cyan]")
+    console.print(f"API Docs available at: [cyan]http://{host}:{port}/docs[/cyan]")
+    uvicorn.run("jnaara.api.main:app", host=host, port=port, reload=reload)
+
+
 if __name__ == "__main__":
     app()
