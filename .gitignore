@@ -58,3 +58,10 @@ htmlcov/
 
 # Local notes & prompts
 docs/prompts.md
+
+# Frontend / Node
+node_modules/
+web/node_modules/
+web/dist/
+.svelte-kit/
+.playwright-mcp/
