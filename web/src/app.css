@@ -577,15 +577,23 @@ body {
 }
 
 .belief-value {
-  font-size: 1.15rem;
+  font-size: 0.95rem;
   font-weight: 600;
-  color: var(--primary);
-  background: var(--primary-light);
-  padding: 0.35rem 0.65rem;
+  color: var(--text-primary);
+  background: var(--bg-surface-subtle);
+  padding: 0.5rem 0.75rem;
   border-radius: var(--radius-sm);
-  border: 1px solid var(--primary-border);
-  font-family: var(--font-mono);
-  word-break: break-all;
+  border: 1px solid var(--border-subtle);
+  font-family: inherit;
+  word-break: normal;
+  overflow-wrap: break-word;
+  white-space: normal;
+  line-height: 1.45;
+}
+
+.belief-card.has-conflicts {
+  border-color: var(--warning-border);
+  background: linear-gradient(180deg, var(--bg-surface) 0%, rgba(245, 158, 11, 0.03) 100%);
 }
 
 .confidence-track {
@@ -601,6 +609,180 @@ body {
   background: linear-gradient(90deg, #6366f1, #22c55e);
   border-radius: var(--radius-full);
   transition: width 0.4s ease;
+}
+
+/* Entity Dossier Views */
+.entity-dossier-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  padding: 1.25rem 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  box-shadow: var(--shadow-sm);
+  transition: var(--transition);
+}
+
+.entity-dossier-card:hover {
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow-md);
+}
+
+.entity-dossier-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid var(--border-subtle);
+  padding-bottom: 0.85rem;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.entity-dossier-title {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.entity-dossier-table-wrapper {
+  overflow-x: auto;
+}
+
+.entity-dossier-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.entity-dossier-table th {
+  text-align: left;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  padding: 0.6rem 0.75rem;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.entity-dossier-table td {
+  padding: 0.75rem;
+  font-size: 0.88rem;
+  border-bottom: 1px solid var(--border-subtle);
+  vertical-align: middle;
+}
+
+.entity-dossier-table tr:last-child td {
+  border-bottom: none;
+}
+
+.entity-dossier-table tr:hover td {
+  background: var(--bg-surface-subtle);
+}
+
+/* Entity Filter Chips */
+.entity-filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  align-items: center;
+  padding: 0.5rem 0;
+}
+
+.entity-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.35rem 0.85rem;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-surface-elevated);
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.entity-chip:hover {
+  border-color: var(--primary-border);
+  color: var(--text-primary);
+}
+
+.entity-chip.active {
+  background: var(--primary-light);
+  color: var(--primary);
+  border-color: var(--primary);
+  font-weight: 600;
+}
+
+/* Executive Highlights Card */
+.highlights-card {
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.06) 0%, rgba(245, 158, 11, 0.06) 100%);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 1rem 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  margin-bottom: 1rem;
+}
+
+.highlights-title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.highlights-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 0.75rem;
+}
+
+.highlight-item {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  padding: 0.65rem 0.85rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.82rem;
+}
+
+.view-mode-toggle {
+  display: flex;
+  background: var(--bg-surface-elevated);
+  padding: 0.2rem;
+  border-radius: var(--radius-md);
+  gap: 0.2rem;
+}
+
+.view-mode-btn {
+  padding: 0.35rem 0.65rem;
+  border-radius: var(--radius-sm);
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  transition: var(--transition);
+}
+
+.view-mode-btn.active {
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  box-shadow: var(--shadow-sm);
 }
 
 /* Conflict Card */

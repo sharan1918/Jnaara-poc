@@ -22,10 +22,10 @@
 
   // Types
   interface Belief {
-    id: str;
-    entity: str;
-    attribute: str;
-    value: str;
+    id: string;
+    entity: string;
+    attribute: string;
+    value: string;
     confidence: number;
     supporting_fact_ids: string[];
     contradicting_fact_ids: string[];
@@ -142,6 +142,69 @@
   let conflicts = $state<Conflict[]>([]);
   let searchQuery = $state('');
   let isLoadingData = $state(false);
+  let selectedEntityFilter = $state<string>('all');
+  let repositoryDisplayMode = $state<'dossier' | 'grid'>('dossier');
+
+  // Derived Entity Breakdown
+  let entityList = $derived.by(() => {
+    const map = new Map<string, { total: number; conflicts: number }>();
+    for (const b of beliefs) {
+      const entry = map.get(b.entity) || { total: 0, conflicts: 0 };
+      entry.total++;
+      if (b.contradicting_fact_ids.length > 0 || b.version > 1) {
+        entry.conflicts++;
+      }
+      map.set(b.entity, entry);
+    }
+    return Array.from(map.entries())
+      .map(([name, stat]) => ({ name, ...stat }))
+      .sort((a, b) => b.total - a.total);
+  });
+
+  // Filtered Beliefs by entity and search
+  let visibleBeliefs = $derived.by(() => {
+    let list = beliefs;
+    if (selectedEntityFilter !== 'all') {
+      list = list.filter((b) => b.entity.toLowerCase() === selectedEntityFilter.toLowerCase());
+    }
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      list = list.filter(
+        (b) =>
+          b.entity.toLowerCase().includes(q) ||
+          b.attribute.toLowerCase().includes(q) ||
+          b.value.toLowerCase().includes(q)
+      );
+    }
+    return list;
+  });
+
+  // Grouped Beliefs for Entity Dossier view
+  let groupedByEntity = $derived.by(() => {
+    const map = new Map<string, Belief[]>();
+    for (const b of visibleBeliefs) {
+      if (!map.has(b.entity)) {
+        map.set(b.entity, []);
+      }
+      map.get(b.entity)!.push(b);
+    }
+    return Array.from(map.entries()).map(([entity, items]) => ({
+      entity,
+      items,
+      conflictsCount: items.filter((i) => i.contradicting_fact_ids.length > 0 || i.version > 1).length
+    }));
+  });
+
+  // Top Contradiction Highlights
+  let topHighlights = $derived.by(() => {
+    return conflicts.slice(0, 3).map((c) => ({
+      entity: c.entity,
+      attribute: c.attribute,
+      description: c.description,
+      winner: c.resolution?.winner,
+      rationale: c.resolution?.rationale
+    }));
+  });
 
   // Provenance Modal
   let activeProvenance = $state<ProvenanceData | null>(null);
@@ -709,7 +772,7 @@
   <!-- Knowledge Base Explorer -->
   <div class="card">
     <div class="card-header">
-      <div style="display: flex; align-items: center; gap: 1.5rem;">
+      <div style="display: flex; align-items: center; gap: 1rem; flex-wrap: wrap;">
         <div class="card-title">
           <Database size={18} color="var(--primary)" />
           Knowledge Repository
@@ -731,6 +794,27 @@
             Conflict Audit Log ({conflicts.length})
           </button>
         </div>
+
+        {#if activeView === 'beliefs'}
+          <div class="view-mode-toggle">
+            <button
+              class="view-mode-btn"
+              class:active={repositoryDisplayMode === 'dossier'}
+              onclick={() => (repositoryDisplayMode = 'dossier')}
+              title="Group beliefs by company / entity"
+            >
+              <Layers size={13} /> By Entity
+            </button>
+            <button
+              class="view-mode-btn"
+              class:active={repositoryDisplayMode === 'grid'}
+              onclick={() => (repositoryDisplayMode = 'grid')}
+              title="Flat Card Grid"
+            >
+              <Database size={13} /> Flat Grid
+            </button>
+          </div>
+        {/if}
       </div>
 
       <div style="display: flex; align-items: center; gap: 0.75rem;">
@@ -738,7 +822,7 @@
           <input
             class="input"
             type="text"
-            placeholder="Search by entity..."
+            placeholder="Search attribute or entity..."
             bind:value={searchQuery}
             oninput={() => { fetchBeliefs(); fetchConflicts(); }}
             style="padding-left: 2rem; width: 220px; font-size: 0.85rem;"
@@ -759,45 +843,184 @@
           No active beliefs held. Ingest a fact or dataset to begin building the belief model.
         </div>
       {:else}
-        <div class="beliefs-grid">
-          {#each beliefs as b}
-            <div class="belief-card">
-              <div style="display: flex; justify-content: space-between; align-items: flex-start;">
-                <div>
-                  <div class="belief-entity">{b.entity}</div>
-                  <div class="belief-attribute">{b.attribute}</div>
-                </div>
-                <span class="pill pill-neutral" style="font-size: 0.7rem;">v{b.version}</span>
-              </div>
-
-              <div class="belief-value">{b.value}</div>
-
-              <div>
-                <div style="display: flex; justify-content: space-between; font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.3rem;">
-                  <span>Confidence</span>
-                  <span>{(b.confidence * 100).toFixed(0)}%</span>
-                </div>
-                <div class="confidence-track">
-                  <div class="confidence-fill" style="width: {b.confidence * 100}%;"></div>
-                </div>
-              </div>
-
-              <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid var(--border-subtle); padding-top: 0.75rem; margin-top: auto;">
-                <span style="font-size: 0.75rem; color: var(--text-muted);">
-                  {b.supporting_fact_ids.length} support &bull; {b.contradicting_fact_ids.length} conflict
-                </span>
-
-                <button
-                  class="btn btn-secondary"
-                  style="padding: 0.35rem 0.65rem; font-size: 0.75rem;"
-                  onclick={() => openProvenance(b.id)}
-                >
-                  <History size={13} /> Provenance
-                </button>
-              </div>
+        <!-- Executive Contradiction Highlights (What Changed) -->
+        {#if topHighlights.length > 0}
+          <div class="highlights-card">
+            <div class="highlights-title">
+              <Sparkles size={16} color="var(--primary)" />
+              <span>Key Contradictions Resolved by Engine</span>
             </div>
-          {/each}
-        </div>
+            <div class="highlights-grid">
+              {#each topHighlights as h}
+                <div class="highlight-item">
+                  <div style="font-weight: 700; color: var(--text-primary); display: flex; align-items: center; justify-content: space-between;">
+                    <span>{h.entity} &bull; {h.attribute}</span>
+                    <span class="pill pill-warning" style="font-size: 0.65rem;">Resolved</span>
+                  </div>
+                  <div style="color: var(--text-secondary); font-size: 0.78rem; line-height: 1.35; margin-top: 0.2rem;">
+                    {h.description}
+                  </div>
+                  {#if h.winner}
+                    <div style="font-size: 0.75rem; color: var(--success); font-weight: 600; margin-top: 0.25rem;">
+                      Winning Claim: {h.winner.replace('_', ' ')}
+                    </div>
+                  {/if}
+                </div>
+              {/each}
+            </div>
+          </div>
+        {/if}
+
+        <!-- Entity Filter Chips -->
+        {#if entityList.length > 1}
+          <div class="entity-filter-bar">
+            <span style="font-size: 0.78rem; font-weight: 600; color: var(--text-muted); margin-right: 0.25rem;">Entity:</span>
+            <button
+              class="entity-chip"
+              class:active={selectedEntityFilter === 'all'}
+              onclick={() => (selectedEntityFilter = 'all')}
+            >
+              All Entities ({beliefs.length})
+            </button>
+            {#each entityList as ent}
+              <button
+                class="entity-chip"
+                class:active={selectedEntityFilter.toLowerCase() === ent.name.toLowerCase()}
+                onclick={() => (selectedEntityFilter = ent.name)}
+              >
+                <span>{ent.name}</span>
+                <span style="opacity: 0.7; font-size: 0.75rem;">({ent.total})</span>
+                {#if ent.conflicts > 0}
+                  <span style="color: var(--warning); font-size: 0.7rem; font-weight: 700;">⚡{ent.conflicts}</span>
+                {/if}
+              </button>
+            {/each}
+          </div>
+        {/if}
+
+        <!-- Mode 1: Entity Dossiers View (Default) -->
+        {#if repositoryDisplayMode === 'dossier'}
+          <div style="display: flex; flex-direction: column; gap: 1.25rem; margin-top: 0.5rem;">
+            {#each groupedByEntity as group}
+              <div class="entity-dossier-card">
+                <div class="entity-dossier-header">
+                  <div class="entity-dossier-title">
+                    <Layers size={18} color="var(--primary)" />
+                    <span>{group.entity}</span>
+                    <span class="pill pill-neutral" style="font-size: 0.72rem;">{group.items.length} Tracked Attributes</span>
+                    {#if group.conflictsCount > 0}
+                      <span class="pill pill-warning" style="font-size: 0.72rem;">
+                        <AlertTriangle size={12} /> {group.conflictsCount} Contradiction{group.conflictsCount > 1 ? 's' : ''} Resolved
+                      </span>
+                    {/if}
+                  </div>
+                </div>
+
+                <div class="entity-dossier-table-wrapper">
+                  <table class="entity-dossier-table">
+                    <thead>
+                      <tr>
+                        <th style="width: 28%;">Attribute</th>
+                        <th style="width: 38%;">Established Value</th>
+                        <th style="width: 14%;">Confidence</th>
+                        <th style="width: 10%;">Status</th>
+                        <th style="width: 10%; text-align: right;">Audit</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {#each group.items as b}
+                        <tr>
+                          <td>
+                            <span style="font-weight: 600; color: var(--text-primary);">{b.attribute}</span>
+                          </td>
+                          <td>
+                            <span class="belief-value" style="display: inline-block; max-width: 100%;">
+                              {b.value}
+                            </span>
+                          </td>
+                          <td>
+                            <div style="display: flex; align-items: center; gap: 0.5rem;">
+                              <span style="font-size: 0.78rem; font-weight: 600; min-width: 32px;">{(b.confidence * 100).toFixed(0)}%</span>
+                              <div class="confidence-track" style="width: 60px; height: 5px;">
+                                <div class="confidence-fill" style="width: {b.confidence * 100}%;"></div>
+                              </div>
+                            </div>
+                          </td>
+                          <td>
+                            {#if b.contradicting_fact_ids.length > 0 || b.version > 1}
+                              <span class="pill pill-warning" style="font-size: 0.68rem;" title="{b.contradicting_fact_ids.length} contradiction(s) resolved">
+                                ⚡ v{b.version} Resolved
+                              </span>
+                            {:else}
+                              <span class="pill pill-neutral" style="font-size: 0.68rem;">
+                                v{b.version} Clean
+                              </span>
+                            {/if}
+                          </td>
+                          <td style="text-align: right;">
+                            <button
+                              class="btn btn-secondary"
+                              style="padding: 0.3rem 0.65rem; font-size: 0.75rem;"
+                              onclick={() => openProvenance(b.id)}
+                            >
+                              <History size={12} /> Provenance
+                            </button>
+                          </td>
+                        </tr>
+                      {/each}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            {/each}
+          </div>
+
+        <!-- Mode 2: Flat Card Grid -->
+        {:else}
+          <div class="beliefs-grid" style="margin-top: 0.5rem;">
+            {#each visibleBeliefs as b}
+              <div class="belief-card" class:has-conflicts={b.contradicting_fact_ids.length > 0 || b.version > 1}>
+                <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                  <div>
+                    <div class="belief-entity">{b.entity}</div>
+                    <div class="belief-attribute">{b.attribute}</div>
+                  </div>
+                  {#if b.contradicting_fact_ids.length > 0 || b.version > 1}
+                    <span class="pill pill-warning" style="font-size: 0.68rem;">⚡ v{b.version}</span>
+                  {:else}
+                    <span class="pill pill-neutral" style="font-size: 0.68rem;">v{b.version}</span>
+                  {/if}
+                </div>
+
+                <div class="belief-value">{b.value}</div>
+
+                <div>
+                  <div style="display: flex; justify-content: space-between; font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.3rem;">
+                    <span>Confidence</span>
+                    <span>{(b.confidence * 100).toFixed(0)}%</span>
+                  </div>
+                  <div class="confidence-track">
+                    <div class="confidence-fill" style="width: {b.confidence * 100}%;"></div>
+                  </div>
+                </div>
+
+                <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid var(--border-subtle); padding-top: 0.75rem; margin-top: auto;">
+                  <span style="font-size: 0.75rem; color: var(--text-muted);">
+                    {b.supporting_fact_ids.length} support &bull; {b.contradicting_fact_ids.length} conflict
+                  </span>
+
+                  <button
+                    class="btn btn-secondary"
+                    style="padding: 0.35rem 0.65rem; font-size: 0.75rem;"
+                    onclick={() => openProvenance(b.id)}
+                  >
+                    <History size={13} /> Provenance
+                  </button>
+                </div>
+              </div>
+            {/each}
+          </div>
+        {/if}
       {/if}
 
     <!-- Conflicts View -->
@@ -821,7 +1044,7 @@
                 </span>
               </div>
 
-              <div style="font-size: 0.88rem;">{c.description}</div>
+              <div style="font-size: 0.88rem; line-height: 1.4;">{c.description}</div>
 
               {#if c.resolution}
                 <div style="background: var(--bg-surface-subtle); padding: 0.65rem 0.85rem; border-radius: var(--radius-sm); border: 1px solid var(--border-subtle); display: flex; flex-direction: column; gap: 0.25rem;">
@@ -833,7 +1056,7 @@
                       Strategy: {c.resolution.strategy_used}
                     </span>
                   </div>
-                  <div style="font-size: 0.82rem; color: var(--text-secondary);">
+                  <div style="font-size: 0.82rem; color: var(--text-secondary); line-height: 1.35;">
                     {c.resolution.rationale}
                   </div>
                 </div>
