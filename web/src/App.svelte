@@ -17,7 +17,9 @@
     FileText,
     Sparkles,
     ChevronRight,
-    X
+    X,
+    Clock,
+    ArrowUpDown
   } from 'lucide-svelte';
 
   // Types
@@ -143,7 +145,70 @@
   let searchQuery = $state('');
   let isLoadingData = $state(false);
   let selectedEntityFilter = $state<string>('all');
+  let selectedFactFilter = $state<string>('all');
+  let sortBy = $state<'sequence' | 'entity' | 'conflicts' | 'confidence'>('sequence');
   let repositoryDisplayMode = $state<'dossier' | 'grid'>('dossier');
+
+  // Fact Sequence Helper
+  function parseFactNum(id: string): number {
+    const match = id.match(/\d+/);
+    return match ? parseInt(match[0], 10) : 9999;
+  }
+
+  function getFactSequenceInfo(b: Belief) {
+    const allFacts = [
+      ...(b.contradicting_fact_ids || []),
+      ...(b.supporting_fact_ids || [])
+    ].filter(Boolean);
+
+    if (allFacts.length === 0) {
+      return {
+        originFactId: 'E?',
+        latestFactId: 'E?',
+        sequenceNum: 9999,
+        allFactIds: [] as string[],
+        hasEvolution: false
+      };
+    }
+
+    const sorted = [...new Set(allFacts)].sort((a, b) => parseFactNum(a) - parseFactNum(b));
+    const originFactId = sorted[0];
+    const latestFactId = (b.supporting_fact_ids && b.supporting_fact_ids.length > 0)
+      ? b.supporting_fact_ids[b.supporting_fact_ids.length - 1]
+      : sorted[sorted.length - 1];
+    const sequenceNum = parseFactNum(originFactId);
+    const hasEvolution = sorted.length > 1 || b.version > 1;
+
+    return {
+      originFactId,
+      latestFactId,
+      sequenceNum,
+      allFactIds: sorted,
+      hasEvolution
+    };
+  }
+
+  // Available Unique Facts in Sequence
+  let availableFactSequence = $derived.by(() => {
+    const factMap = new Map<string, { id: string; num: number; hasConflicts: boolean; count: number }>();
+    for (const b of beliefs) {
+      const info = getFactSequenceInfo(b);
+      for (const fid of info.allFactIds) {
+        const existing = factMap.get(fid) || {
+          id: fid,
+          num: parseFactNum(fid),
+          hasConflicts: false,
+          count: 0
+        };
+        existing.count++;
+        if (b.contradicting_fact_ids.includes(fid) || b.version > 1) {
+          existing.hasConflicts = true;
+        }
+        factMap.set(fid, existing);
+      }
+    }
+    return Array.from(factMap.values()).sort((a, b) => a.num - b.num);
+  });
 
   // Derived Entity Breakdown
   let entityList = $derived.by(() => {
@@ -161,22 +226,55 @@
       .sort((a, b) => b.total - a.total);
   });
 
-  // Filtered Beliefs by entity and search
+  // Filtered & Sorted Beliefs
   let visibleBeliefs = $derived.by(() => {
     let list = beliefs;
     if (selectedEntityFilter !== 'all') {
       list = list.filter((b) => b.entity.toLowerCase() === selectedEntityFilter.toLowerCase());
     }
+    if (selectedFactFilter !== 'all') {
+      list = list.filter((b) => {
+        const info = getFactSequenceInfo(b);
+        return info.allFactIds.includes(selectedFactFilter);
+      });
+    }
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
-      list = list.filter(
-        (b) =>
+      list = list.filter((b) => {
+        const info = getFactSequenceInfo(b);
+        return (
           b.entity.toLowerCase().includes(q) ||
           b.attribute.toLowerCase().includes(q) ||
-          b.value.toLowerCase().includes(q)
-      );
+          b.value.toLowerCase().includes(q) ||
+          info.originFactId.toLowerCase().includes(q) ||
+          info.allFactIds.some((f) => f.toLowerCase().includes(q))
+        );
+      });
     }
-    return list;
+
+    const sortedList = [...list];
+    sortedList.sort((a, b) => {
+      if (sortBy === 'sequence') {
+        const sa = getFactSequenceInfo(a).sequenceNum;
+        const sb = getFactSequenceInfo(b).sequenceNum;
+        if (sa !== sb) return sa - sb;
+        return a.entity.localeCompare(b.entity);
+      }
+      if (sortBy === 'entity') {
+        return a.entity.localeCompare(b.entity) || a.attribute.localeCompare(b.attribute);
+      }
+      if (sortBy === 'conflicts') {
+        const aConf = (a.contradicting_fact_ids.length > 0 || a.version > 1) ? 1 : 0;
+        const bConf = (b.contradicting_fact_ids.length > 0 || b.version > 1) ? 1 : 0;
+        return bConf - aConf || b.version - a.version;
+      }
+      if (sortBy === 'confidence') {
+        return b.confidence - a.confidence;
+      }
+      return 0;
+    });
+
+    return sortedList;
   });
 
   // Grouped Beliefs for Entity Dossier view
@@ -188,11 +286,26 @@
       }
       map.get(b.entity)!.push(b);
     }
-    return Array.from(map.entries()).map(([entity, items]) => ({
-      entity,
-      items,
-      conflictsCount: items.filter((i) => i.contradicting_fact_ids.length > 0 || i.version > 1).length
-    }));
+    const groups = Array.from(map.entries()).map(([entity, items]) => {
+      // Sort items inside dossier by sequence number
+      items.sort((a, b) => {
+        const sa = getFactSequenceInfo(a).sequenceNum;
+        const sb = getFactSequenceInfo(b).sequenceNum;
+        return sa - sb;
+      });
+      const earliestSeq = items.length > 0 ? getFactSequenceInfo(items[0]).sequenceNum : 9999;
+      return {
+        entity,
+        items,
+        earliestSeq,
+        conflictsCount: items.filter((i) => i.contradicting_fact_ids.length > 0 || i.version > 1).length
+      };
+    });
+
+    if (sortBy === 'sequence') {
+      groups.sort((a, b) => a.earliestSeq - b.earliestSeq);
+    }
+    return groups;
   });
 
   // Top Contradiction Highlights
@@ -814,6 +927,20 @@
               <Database size={13} /> Flat Grid
             </button>
           </div>
+
+          <div style="display: flex; align-items: center; gap: 0.35rem; background: var(--bg-surface-elevated); padding: 0.2rem 0.5rem; border-radius: var(--radius-md); border: 1px solid var(--border-subtle);">
+            <ArrowUpDown size={13} color="var(--text-muted)" />
+            <span style="font-size: 0.72rem; font-weight: 600; color: var(--text-muted);">Sort:</span>
+            <select
+              bind:value={sortBy}
+              style="background: transparent; border: none; color: var(--text-primary); font-size: 0.74rem; font-weight: 600; cursor: pointer; outline: none;"
+            >
+              <option value="sequence">Sequence (E1 → E27)</option>
+              <option value="entity">Entity (A-Z)</option>
+              <option value="conflicts">Most Contradicted</option>
+              <option value="confidence">Highest Confidence</option>
+            </select>
+          </div>
         {/if}
       </div>
 
@@ -898,6 +1025,36 @@
           </div>
         {/if}
 
+        <!-- Sequential Fact Timeline Bar (E1 -> E27) -->
+        {#if availableFactSequence.length > 0}
+          <div class="seq-filter-bar">
+            <span style="font-size: 0.78rem; font-weight: 600; color: var(--text-muted); display: inline-flex; align-items: center; gap: 0.3rem; margin-right: 0.25rem;">
+              <Clock size={13} /> Sequence:
+            </span>
+            <button
+              class="seq-pill"
+              class:active={selectedFactFilter === 'all'}
+              onclick={() => (selectedFactFilter = 'all')}
+            >
+              All Steps ({availableFactSequence.length})
+            </button>
+            {#each availableFactSequence as f}
+              <button
+                class="seq-pill"
+                class:active={selectedFactFilter === f.id}
+                class:has-conflict={f.hasConflicts}
+                onclick={() => (selectedFactFilter = f.id)}
+                title="Filter by Fact {f.id} ({f.count} belief{f.count > 1 ? 's' : ''})"
+              >
+                <span>{f.id}</span>
+                {#if f.hasConflicts}
+                  <span style="color: var(--warning); font-size: 0.65rem;">⚡</span>
+                {/if}
+              </button>
+            {/each}
+          </div>
+        {/if}
+
         <!-- Mode 1: Entity Dossiers View (Default) -->
         {#if repositoryDisplayMode === 'dossier'}
           <div style="display: flex; flex-direction: column; gap: 1.25rem; margin-top: 0.5rem;">
@@ -920,16 +1077,28 @@
                   <table class="entity-dossier-table">
                     <thead>
                       <tr>
-                        <th style="width: 28%;">Attribute</th>
-                        <th style="width: 38%;">Established Value</th>
-                        <th style="width: 14%;">Confidence</th>
-                        <th style="width: 10%;">Status</th>
-                        <th style="width: 10%; text-align: right;">Audit</th>
+                        <th style="width: 15%;">Seq / Fact</th>
+                        <th style="width: 25%;">Attribute</th>
+                        <th style="width: 32%;">Established Value</th>
+                        <th style="width: 12%;">Confidence</th>
+                        <th style="width: 8%;">Status</th>
+                        <th style="width: 8%; text-align: right;">Audit</th>
                       </tr>
                     </thead>
                     <tbody>
                       {#each group.items as b}
+                        {@const info = getFactSequenceInfo(b)}
                         <tr>
+                          <td>
+                            <div style="display: flex; align-items: center; gap: 0.35rem; flex-wrap: wrap;">
+                              <span class="seq-num-badge" title="Sequential processing order">#{info.sequenceNum < 9999 ? info.sequenceNum : '?'}</span>
+                              <span class="fact-tag origin" title="Origin Fact">{info.originFactId}</span>
+                              {#if info.hasEvolution && info.allFactIds.length > 1}
+                                <span style="color: var(--text-muted); font-size: 0.65rem;">→</span>
+                                <span class="fact-tag latest" title="Latest updating fact">{info.latestFactId}</span>
+                              {/if}
+                            </div>
+                          </td>
                           <td>
                             <span style="font-weight: 600; color: var(--text-primary);">{b.attribute}</span>
                           </td>
@@ -979,11 +1148,12 @@
         {:else}
           <div class="beliefs-grid" style="margin-top: 0.5rem;">
             {#each visibleBeliefs as b}
+              {@const info = getFactSequenceInfo(b)}
               <div class="belief-card" class:has-conflicts={b.contradicting_fact_ids.length > 0 || b.version > 1}>
-                <div style="display: flex; justify-content: space-between; align-items: flex-start;">
-                  <div>
-                    <div class="belief-entity">{b.entity}</div>
-                    <div class="belief-attribute">{b.attribute}</div>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.45rem;">
+                  <div style="display: flex; align-items: center; gap: 0.35rem;">
+                    <span class="seq-num-badge">#{info.sequenceNum < 9999 ? info.sequenceNum : '?'}</span>
+                    <span class="fact-tag origin" title="Origin Fact">Fact {info.originFactId}</span>
                   </div>
                   {#if b.contradicting_fact_ids.length > 0 || b.version > 1}
                     <span class="pill pill-warning" style="font-size: 0.68rem;">⚡ v{b.version}</span>
@@ -991,6 +1161,21 @@
                     <span class="pill pill-neutral" style="font-size: 0.68rem;">v{b.version}</span>
                   {/if}
                 </div>
+
+                <div>
+                  <div class="belief-entity">{b.entity}</div>
+                  <div class="belief-attribute">{b.attribute}</div>
+                </div>
+
+                {#if info.hasEvolution && info.allFactIds.length > 1}
+                  <div class="fact-trail-strip" title="Sequential fact evolution history">
+                    <span style="font-size: 0.68rem; color: var(--text-muted); font-weight: 600;">Chain:</span>
+                    {#each info.allFactIds as fid, idx}
+                      {#if idx > 0}<span class="trail-arrow">→</span>{/if}
+                      <span class="fact-trail-pill" class:active-fact={fid === info.latestFactId}>{fid}</span>
+                    {/each}
+                  </div>
+                {/if}
 
                 <div class="belief-value">{b.value}</div>
 

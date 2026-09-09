@@ -785,6 +785,119 @@ body {
   box-shadow: var(--shadow-sm);
 }
 
+/* Sequential Ordering & Fact Tags */
+.seq-filter-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  overflow-x: auto;
+  padding: 0.35rem 0.2rem;
+  margin-bottom: 0.75rem;
+  scrollbar-width: thin;
+}
+
+.seq-pill {
+  padding: 0.22rem 0.55rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-surface-elevated);
+  color: var(--text-secondary);
+  font-family: monospace;
+  font-size: 0.74rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  transition: var(--transition);
+}
+
+.seq-pill:hover {
+  border-color: var(--primary-border);
+  color: var(--text-primary);
+}
+
+.seq-pill.active {
+  background: var(--primary-light);
+  color: var(--primary);
+  border-color: var(--primary);
+}
+
+.seq-pill.has-conflict {
+  border-color: rgba(245, 158, 11, 0.4);
+}
+
+.seq-num-badge {
+  background: rgba(99, 102, 241, 0.12);
+  border: 1px solid rgba(99, 102, 241, 0.3);
+  color: #818cf8;
+  font-size: 0.7rem;
+  font-weight: 700;
+  font-family: monospace;
+  padding: 0.1rem 0.35rem;
+  border-radius: var(--radius-sm);
+  display: inline-flex;
+  align-items: center;
+}
+
+.fact-tag {
+  font-family: monospace;
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 0.1rem 0.4rem;
+  border-radius: var(--radius-sm);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.fact-tag.origin {
+  background: var(--bg-surface-subtle);
+  border: 1px solid var(--border-medium);
+  color: var(--text-primary);
+}
+
+.fact-tag.latest {
+  background: rgba(16, 185, 129, 0.12);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  color: #34d399;
+}
+
+.fact-trail-strip {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  flex-wrap: wrap;
+  margin: 0.4rem 0;
+  padding: 0.25rem 0.45rem;
+  background: var(--bg-surface-subtle);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
+}
+
+.fact-trail-pill {
+  font-family: monospace;
+  font-size: 0.68rem;
+  padding: 0.05rem 0.3rem;
+  border-radius: 3px;
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-subtle);
+}
+
+.fact-trail-pill.active-fact {
+  background: rgba(99, 102, 241, 0.18);
+  color: #a5b4fc;
+  border-color: rgba(99, 102, 241, 0.4);
+  font-weight: 700;
+}
+
+.trail-arrow {
+  font-size: 0.65rem;
+  color: var(--text-muted);
+}
+
 /* Conflict Card */
 .conflict-card {
   background: var(--bg-surface);
