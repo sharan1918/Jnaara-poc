@@ -15,7 +15,7 @@ class Settings(BaseSettings):
     primary_llm: Literal["groq", "gemini", "mock"] = "groq"
     primary_model: str = "openai/gpt-oss-120b"
     secondary_llm: Literal["groq", "gemini", "mock"] = "gemini"
-    secondary_model: str = "gemini-2.5-flash"
+    secondary_model: str = "gemini-3.6-flash"
 
     # Application Persistence & Strategy
     db_path: Path = Path("data/jnaara.db")

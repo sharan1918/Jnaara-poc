@@ -132,6 +132,7 @@
 
   // File Upload
   let uploadFile = $state<File | null>(null);
+  let uploadSequence = $state<string>('');
   let isUploading = $state(false);
   let uploadMessage = $state<string | null>(null);
   let dragOver = $state(false);
@@ -294,14 +295,18 @@
       const formData = new FormData();
       formData.append('file', uploadFile);
 
-      const res = await fetch('/api/facts/upload', {
+      const url = uploadSequence
+        ? `/api/facts/upload?sequence=${encodeURIComponent(uploadSequence)}`
+        : '/api/facts/upload';
+
+      const res = await fetch(url, {
         method: 'POST',
         body: formData
       });
 
       if (res.ok) {
         const data = await res.json();
-        uploadMessage = `Processed ${data.total_processed} facts, extracted ${data.total_claims} claims, detected ${data.total_conflicts} conflicts.`;
+        uploadMessage = `Successfully processed ${data.total_processed} facts (${data.total_claims} claims, ${data.total_conflicts} conflicts detected).`;
         uploadFile = null;
         await refreshAll();
       } else {
@@ -584,6 +589,16 @@
                 if (target.files?.[0]) uploadFile = target.files[0];
               }}
             />
+          </div>
+
+          <div class="input-group">
+            <span class="label">Benchmark Sequence Filter (Optional)</span>
+            <select class="select" bind:value={uploadSequence}>
+              <option value="">All Sequences (Process full dataset)</option>
+              <option value="sequence_1_easy">Sequence 1 — Easy (Direct Contradictions, 27 facts)</option>
+              <option value="sequence_2_medium">Sequence 2 — Medium (Partial & Cross-Entity, 27 facts)</option>
+              <option value="sequence_3_hard">Sequence 3 — Hard (Nuanced Logical Inferences, 30 facts)</option>
+            </select>
           </div>
 
           {#if uploadMessage}

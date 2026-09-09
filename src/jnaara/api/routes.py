@@ -281,25 +281,67 @@ async def upload_facts_file(
             detail=f"Invalid JSON format in file: {exc}",
         )
 
-    raw_facts = []
-    if isinstance(data, list):
-        raw_facts = data
-    elif isinstance(data, dict):
-        if "facts" in data and isinstance(data["facts"], list):
-            raw_facts = data["facts"]
-        elif sequence and sequence in data and isinstance(data[sequence], list):
-            raw_facts = data[sequence]
-        else:
-            # Flatten all sequences found in dictionary
-            for seq_name, facts in data.items():
-                if isinstance(facts, list):
-                    raw_facts.extend(facts)
+    def _extract_from_dict_or_list(obj: Any, target_seq: str | None = None) -> list[dict[str, Any]]:
+        results: list[dict[str, Any]] = []
+        if isinstance(obj, list):
+            for item in obj:
+                if isinstance(item, dict) and "content" in item:
+                    results.append(item)
+            return results
+
+        if not isinstance(obj, dict):
+            return results
+
+        clean_target = target_seq.strip().lower() if target_seq and target_seq.strip() else None
+
+        # If a specific sequence was requested (e.g. sequence_1_easy)
+        if clean_target:
+            matched_key = None
+            for k in obj:
+                if k.lower() == clean_target:
+                    matched_key = k
+                    break
+            if matched_key:
+                return _extract_from_dict_or_list(obj[matched_key], target_seq=None)
+
+        # Check if root has "facts"
+        if "facts" in obj and isinstance(obj["facts"], list):
+            for item in obj["facts"]:
+                if isinstance(item, dict) and "content" in item:
+                    results.append(item)
+            return results
+
+        # Otherwise extract from all top-level sequence sections
+        for key, val in obj.items():
+            if key.lower() in ("metadata", "info", "instructions"):
+                continue
+            if isinstance(val, list):
+                for item in val:
+                    if isinstance(item, dict) and "content" in item:
+                        results.append(item)
+            elif isinstance(val, dict):
+                if "facts" in val and isinstance(val["facts"], list):
+                    for item in val["facts"]:
+                        if isinstance(item, dict) and "content" in item:
+                            results.append(item)
+                elif "data" in val and isinstance(val["data"], list):
+                    for item in val["data"]:
+                        if isinstance(item, dict) and "content" in item:
+                            results.append(item)
+
+        return results
+
+    raw_facts = _extract_from_dict_or_list(data, target_seq=sequence)
 
     if not raw_facts:
-        logger.warning("[API] POST /api/facts/upload -> file '%s' contained 0 valid facts", file.filename)
+        logger.warning(
+            "[API] POST /api/facts/upload -> file '%s' contained 0 valid facts (sequence filter: %s)",
+            file.filename,
+            sequence,
+        )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="No valid facts found in uploaded JSON file.",
+            detail=f"No valid facts found in uploaded JSON file (sequence: {sequence or 'all'}).",
         )
 
     repo, manager, resolver, session = pipeline
@@ -317,12 +359,15 @@ async def upload_facts_file(
                 pass
 
         fact_id = item.get("id") or f"fact_{int(datetime.now().timestamp())}_{uuid4().hex[:6]}"
+        reliability_raw = str(item.get("source_reliability", "medium")).lower().strip()
+        reliability = reliability_raw if reliability_raw in ("high", "medium", "low") else "medium"
+
         facts_to_process.append(
             Fact(
                 id=str(fact_id),
                 timestamp=parsed_ts,
                 source=str(item.get("source", "uploaded_file")),
-                source_reliability=item.get("source_reliability", "medium"),
+                source_reliability=reliability,  # type: ignore
                 content=str(item["content"]),
             )
         )
