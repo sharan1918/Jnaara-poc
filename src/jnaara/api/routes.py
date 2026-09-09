@@ -1,4 +1,5 @@
 import json
+import logging
 from datetime import datetime
 from typing import Any, Literal
 from uuid import uuid4
@@ -31,6 +32,7 @@ from jnaara.db.repository import Repository
 from jnaara.models.domain import Fact, utc_now
 from jnaara.config import get_settings
 
+logger = logging.getLogger("jnaara.routes")
 router = APIRouter(prefix="/api", tags=["Belief Engine"])
 
 
@@ -124,6 +126,13 @@ def submit_fact(
     fact_id = payload.id or f"fact_{int(datetime.now().timestamp())}_{uuid4().hex[:6]}"
     timestamp = payload.timestamp or utc_now()
 
+    logger.info(
+        "[API] POST /api/facts -> fact_id='%s', source='%s' (rel=%s)",
+        fact_id,
+        payload.source,
+        payload.source_reliability,
+    )
+
     fact = Fact(
         id=fact_id,
         timestamp=timestamp,
@@ -139,6 +148,13 @@ def submit_fact(
     conflicts_resp = [
         _to_conflict_response(conf) for _, conf in result.results if conf is not None
     ]
+
+    logger.info(
+        "[API] POST /api/facts completed: fact_id='%s', claims=%d, conflicts=%d",
+        result.fact_id,
+        len(claims_resp),
+        len(conflicts_resp),
+    )
 
     return FactProcessResponse(
         fact_id=result.fact_id,
@@ -163,6 +179,8 @@ def submit_bulk_facts(
 ):
     """Submit a list of facts to be processed sequentially."""
     repo, manager, resolver, session = pipeline
+
+    logger.info("[API] POST /api/facts/bulk -> received %d facts", len(payload.facts))
 
     facts_to_process: list[Fact] = []
     for f in payload.facts:
@@ -209,6 +227,15 @@ def submit_bulk_facts(
             )
         )
 
+    logger.info(
+        "[API] POST /api/facts/bulk completed: %d submitted, %d processed, %d skipped, %d claims, %d conflicts",
+        len(facts_to_process),
+        len(facts_to_process) - total_skipped,
+        total_skipped,
+        total_claims,
+        total_conflicts,
+    )
+
     return BulkProcessResponse(
         total_submitted=len(facts_to_process),
         total_processed=len(facts_to_process) - total_skipped,
@@ -239,9 +266,16 @@ async def upload_facts_file(
         )
 
     contents = await file.read()
+    logger.info(
+        "[API] POST /api/facts/upload -> filename='%s', size=%d bytes, sequence=%s",
+        file.filename,
+        len(contents),
+        sequence,
+    )
     try:
         data = json.loads(contents.decode("utf-8"))
     except Exception as exc:
+        logger.warning("[API] POST /api/facts/upload -> failed to parse JSON from file '%s': %s", file.filename, exc)
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Invalid JSON format in file: {exc}",
@@ -262,6 +296,7 @@ async def upload_facts_file(
                     raw_facts.extend(facts)
 
     if not raw_facts:
+        logger.warning("[API] POST /api/facts/upload -> file '%s' contained 0 valid facts", file.filename)
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="No valid facts found in uploaded JSON file.",
@@ -293,6 +328,7 @@ async def upload_facts_file(
         )
 
     facts_to_process.sort(key=lambda item: item.timestamp)
+    logger.info("[API] POST /api/facts/upload -> sorted and queued %d facts to process", len(facts_to_process))
 
     results: list[FactProcessResponse] = []
     total_claims = 0
@@ -322,6 +358,15 @@ async def upload_facts_file(
                 conflicts=conflicts_resp,
             )
         )
+
+    logger.info(
+        "[API] POST /api/facts/upload completed for '%s': %d facts processed, %d skipped, %d claims extracted, %d conflicts",
+        file.filename,
+        len(facts_to_process) - total_skipped,
+        total_skipped,
+        total_claims,
+        total_conflicts,
+    )
 
     return BulkProcessResponse(
         total_submitted=len(facts_to_process),
@@ -494,11 +539,14 @@ def switch_strategy(
 ):
     """Switch between 'recency' and 'corroboration' conflict resolution strategies."""
     try:
+        old_strategy = resolver.active_strategy
         resolver.switch_strategy(payload.strategy)
+        logger.info("[API] POST /api/strategy -> switched strategy from '%s' to '%s'", old_strategy, payload.strategy)
         return GenericSuccessResponse(
             message=f"Conflict resolution strategy successfully switched to '{payload.strategy}'.",
         )
     except ValueError as exc:
+        logger.warning("[API] POST /api/strategy -> failed to switch strategy: %s", exc)
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(exc),
@@ -516,8 +564,10 @@ def reset_database(
     session: Session = Depends(get_db),
 ):
     """Clear all facts, beliefs, claims, conflicts, and provenance history."""
+    logger.warning("[API] POST /api/reset -> user requested complete database reset")
     repo = Repository(session)
     repo.clear_all()
+    logger.info("[API] POST /api/reset -> database cleared successfully")
     return GenericSuccessResponse(
         message="Belief database cleared successfully.",
     )

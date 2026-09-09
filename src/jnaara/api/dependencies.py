@@ -13,6 +13,10 @@ from jnaara.db.repository import Repository
 from jnaara.llm.factory import create_providers
 from jnaara.llm.mock import MockLLMProvider
 
+import logging
+
+logger = logging.getLogger("jnaara.dependencies")
+
 # Engine cache
 _engine = None
 _session_factory = None
@@ -71,12 +75,28 @@ def get_belief_manager(
     if (settings.primary_llm == "groq" and not has_groq) or (
         settings.secondary_llm == "gemini" and not has_google
     ):
+        logger.info(
+            "[Pipeline] Live API keys not set for configured providers (groq=%s, google=%s). Using MockLLMProvider.",
+            has_groq,
+            has_google,
+        )
         primary = MockLLMProvider("mock-primary")
         secondary = MockLLMProvider("mock-secondary")
     else:
         try:
             primary, secondary = create_providers(settings)
-        except Exception:
+            logger.info(
+                "[Pipeline] Initialized live LLM providers: Primary=%s (%s), Secondary=%s (%s)",
+                settings.primary_llm,
+                settings.primary_model,
+                settings.secondary_llm,
+                settings.secondary_model,
+            )
+        except Exception as exc:
+            logger.warning(
+                "[Pipeline] Failed to create live LLM providers (%s). Falling back to mock providers.",
+                exc,
+            )
             primary = MockLLMProvider("mock-primary")
             secondary = MockLLMProvider("mock-secondary")
 

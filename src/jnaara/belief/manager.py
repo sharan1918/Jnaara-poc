@@ -40,10 +40,22 @@ class BeliefManager:
 
     def process_fact(self, fact: Fact) -> ProcessingResult:
         """Process a single incoming fact idempotently through the belief pipeline."""
+        content_preview = fact.content.replace("\n", " ")
+        if len(content_preview) > 90:
+            content_preview = content_preview[:90] + "..."
+
         # 1. Idempotency check: skip already processed facts
         if self.repository.fact_exists(fact.id):
-            logger.info("Fact %s already processed. Skipping (idempotent).", fact.id)
+            logger.info("[FACT SKIP] Fact '%s' already processed. Skipping (idempotent).", fact.id)
             return ProcessingResult(fact_id=fact.id, skipped=True)
+
+        logger.info(
+            "[FACT INGEST] ID: %s | Source: '%s' (rel: %s) | Content: '%s'",
+            fact.id,
+            fact.source,
+            fact.source_reliability,
+            content_preview,
+        )
 
         # 2. Persist raw fact and derived source metadata
         self.repository.save_fact(fact)
@@ -53,6 +65,20 @@ class BeliefManager:
         # 3. LLM claim extraction with validation
         analysis = self.analyzer.extract_claims(fact)
         self.repository.save_claims(analysis.claims)
+        logger.info(
+            "[CLAIMS EXTRACTED] Fact '%s' produced %d claim(s):",
+            fact.id,
+            len(analysis.claims),
+        )
+        for c in analysis.claims:
+            logger.info(
+                "  • [%s] %s = '%s' (type: %s, conf: %.2f)",
+                c.entity,
+                c.attribute,
+                c.value,
+                c.claim_type,
+                c.confidence,
+            )
 
         # 4. Evaluate each extracted claim
         step_results: list[tuple[Decision, Conflict | None]] = []
@@ -60,6 +86,15 @@ class BeliefManager:
         for claim in analysis.claims:
             decision, conflict = self.detector.detect(claim, fact)
             self.repository.save_decision(decision)
+
+            logger.info(
+                "[DECISION] [%s - %s] -> Action: %s (Tier: %s) | Reason: %s",
+                claim.entity,
+                claim.attribute,
+                decision.action,
+                decision.tier,
+                decision.reason,
+            )
 
             match decision.action:
                 case "NEW_BELIEF":
@@ -103,6 +138,14 @@ class BeliefManager:
             status="active",
         )
         self.repository.upsert_belief(belief, changed_by_fact_id=fact.id, reason=decision.reason)
+        logger.info(
+            "[NEW BELIEF] Created belief '%s' for [%s - %s] = '%s' (conf: %.2f)",
+            belief.id[:8],
+            belief.entity,
+            belief.attribute,
+            belief.value,
+            belief.confidence,
+        )
 
     def _handle_update_belief(self, claim: Claim, fact: Fact, decision: Decision) -> None:
         existing = self.repository.get_belief_by_entity_attribute(claim.entity, claim.attribute)
@@ -122,6 +165,15 @@ class BeliefManager:
             if fact.id not in existing.supporting_fact_ids:
                 existing.supporting_fact_ids.append(fact.id)
             self.repository.upsert_belief(existing, changed_by_fact_id=fact.id, reason=decision.reason)
+            logger.info(
+                "[UPDATE BELIEF] Updated belief '%s' for [%s - %s] -> '%s' (v%d, conf: %.2f)",
+                existing.id[:8],
+                existing.entity,
+                existing.attribute,
+                existing.value,
+                existing.version,
+                existing.confidence,
+            )
         else:
             self._handle_new_belief(claim, fact, decision)
 
@@ -147,6 +199,16 @@ class BeliefManager:
                 )
                 return
 
+        logger.info(
+            "[CONFLICT DETECTED] Type: %s on [%s - %s] (Severity: %s) | Existing: '%s' vs Incoming: '%s'",
+            conflict.conflict_type,
+            claim.entity,
+            claim.attribute,
+            conflict.severity,
+            existing_belief.value,
+            claim.value,
+        )
+
         # Build comprehensive resolution context
         existing_sources = self.repository.get_sources_for_facts(existing_belief.supporting_fact_ids)
         all_related_facts = self.repository.get_all_facts()
@@ -164,6 +226,14 @@ class BeliefManager:
         conflict.resolution = resolution
         self.repository.save_conflict(conflict)
         self.repository.save_resolution(resolution)
+
+        logger.info(
+            "[CONFLICT RESOLVED] Winner: %s via strategy '%s' (delta: %+.2f) | Rationale: %s",
+            resolution.winner,
+            self.resolver.active_strategy,
+            resolution.confidence_delta,
+            resolution.rationale,
+        )
 
         # Apply resolution result to persistent belief state
         if resolution.winner == "incoming_claim":

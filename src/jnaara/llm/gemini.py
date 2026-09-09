@@ -1,9 +1,12 @@
+import logging
 from pydantic import SecretStr
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_google_genai import ChatGoogleGenerativeAI
 
 from jnaara.llm.provider import LLMProvider
 from jnaara.models.domain import Belief, Claim, Fact, FactAnalysis, InferenceConflictResult
+
+logger = logging.getLogger("jnaara.llm.gemini")
 
 
 class GeminiProvider(LLMProvider):
@@ -19,6 +22,7 @@ class GeminiProvider(LLMProvider):
         )
 
     def extract_claims(self, fact: Fact) -> FactAnalysis:
+        logger.info("[Gemini] Invoking ChatGoogleGenerativeAI (%s) for claim extraction on fact '%s'...", self.model, fact.id)
         structured_llm = self._llm.with_structured_output(FactAnalysis)
         system_prompt = (
             "You are an expert fact extractor. Extract ALL factual claims from the given fact "
@@ -38,8 +42,11 @@ class GeminiProvider(LLMProvider):
         ]
         result = structured_llm.invoke(messages)
         if isinstance(result, dict):
-            return FactAnalysis.model_validate(result)
-        return result  # type: ignore
+            parsed = FactAnalysis.model_validate(result)
+        else:
+            parsed = result  # type: ignore
+        logger.info("[Gemini] Extracted %d claim(s) for fact '%s'", len(parsed.claims), fact.id)
+        return parsed
 
     def analyze_inference_conflict(
         self, claim: Claim, existing_beliefs: list[Belief]
@@ -62,14 +69,30 @@ class GeminiProvider(LLMProvider):
             f"ID: {claim.id} | Entity: {claim.entity} | Attribute: {claim.attribute} | Value: {claim.value} | Temporal Scope: {claim.temporal_scope}\n\n"
             f"Existing Beliefs for comparison:\n{beliefs_text}\n"
         )
+        logger.info(
+            "[Gemini] Analyzing inference conflict for claim '%s' (%s - %s) against %d existing belief(s)...",
+            claim.id,
+            claim.entity,
+            claim.attribute,
+            len(existing_beliefs),
+        )
         messages = [
             SystemMessage(content=system_prompt),
             HumanMessage(content=user_prompt),
         ]
         result = structured_llm.invoke(messages)
         if isinstance(result, dict):
-            return InferenceConflictResult.model_validate(result)
-        return result  # type: ignore
+            parsed_res = InferenceConflictResult.model_validate(result)
+        else:
+            parsed_res = result  # type: ignore
+        logger.info(
+            "[Gemini] Inference analysis completed for claim '%s': conflict=%s, type=%s, severity=%s",
+            claim.id,
+            parsed_res.is_conflict,
+            parsed_res.conflict_type,
+            parsed_res.severity,
+        )
+        return parsed_res
 
     def get_provider_name(self) -> str:
         return "gemini"
