@@ -1,3 +1,4 @@
+import json
 import logging
 from pydantic import SecretStr
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -7,6 +8,24 @@ from jnaara.llm.provider import LLMProvider
 from jnaara.models.domain import Belief, Claim, Fact, FactAnalysis, InferenceConflictResult
 
 logger = logging.getLogger("jnaara.llm.groq")
+
+
+def _recover_failed_generation(exc: Exception) -> dict | None:
+    """Attempt to recover valid JSON payload when Groq returns tool_use_failed."""
+    exc_str = str(exc)
+    marker = "'failed_generation': '"
+    idx = exc_str.find(marker)
+    if idx != -1:
+        sub = exc_str[idx + len(marker) :]
+        end_idx = sub.rfind("'")
+        if end_idx != -1:
+            try:
+                raw = sub[:end_idx]
+                unescaped = raw.encode("utf-8").decode("unicode_escape")
+                return json.loads(unescaped)
+            except Exception:
+                pass
+    return None
 
 
 class GroqProvider(LLMProvider):
@@ -41,7 +60,16 @@ class GroqProvider(LLMProvider):
             SystemMessage(content=system_prompt),
             HumanMessage(content=user_prompt),
         ]
-        result = structured_llm.invoke(messages)
+        try:
+            result = structured_llm.invoke(messages)
+        except Exception as exc:
+            recovered = _recover_failed_generation(exc)
+            if recovered:
+                logger.info("[Groq] Successfully recovered claim extraction from failed_generation JSON")
+                result = recovered
+            else:
+                raise
+
         if isinstance(result, dict):
             parsed = FactAnalysis.model_validate(result)
         else:
@@ -81,7 +109,16 @@ class GroqProvider(LLMProvider):
             SystemMessage(content=system_prompt),
             HumanMessage(content=user_prompt),
         ]
-        result = structured_llm.invoke(messages)
+        try:
+            result = structured_llm.invoke(messages)
+        except Exception as exc:
+            recovered = _recover_failed_generation(exc)
+            if recovered:
+                logger.info("[Groq] Successfully recovered inference conflict from failed_generation JSON")
+                result = recovered
+            else:
+                raise
+
         if isinstance(result, dict):
             parsed_res = InferenceConflictResult.model_validate(result)
         else:
@@ -97,3 +134,4 @@ class GroqProvider(LLMProvider):
 
     def get_provider_name(self) -> str:
         return "groq"
+

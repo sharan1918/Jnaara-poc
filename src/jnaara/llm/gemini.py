@@ -19,6 +19,7 @@ class GeminiProvider(LLMProvider):
             model=model,
             google_api_key=key_val,
             temperature=0.0,
+            max_retries=1,
         )
 
     def extract_claims(self, fact: Fact) -> FactAnalysis:
