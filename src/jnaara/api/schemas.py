@@ -129,6 +129,7 @@ class FactProcessResponse(BaseModel):
     claims: list[ClaimResponse]
     decisions: list[DecisionResponse]
     conflicts: list[ConflictResponse]
+    output_file: str | None = None
 
 
 class BulkProcessResponse(BaseModel):
@@ -140,6 +141,7 @@ class BulkProcessResponse(BaseModel):
     total_claims: int
     total_conflicts: int
     results: list[FactProcessResponse]
+    output_file: str | None = None
 
 
 class BeliefResponse(BaseModel):

@@ -482,7 +482,8 @@
 
       if (res.ok) {
         const data = await res.json();
-        uploadMessage = `Successfully processed ${data.total_processed} facts (${data.total_claims} claims, ${data.total_conflicts} conflicts detected).`;
+        const savedNotice = data.output_file ? ` (Saved to: ${data.output_file})` : '';
+        uploadMessage = `Successfully processed ${data.total_processed} facts (${data.total_claims} claims, ${data.total_conflicts} conflicts detected).${savedNotice}`;
         uploadFile = null;
         await refreshAll();
       } else {
@@ -790,9 +791,9 @@
               onclick={handleFileUpload}
             >
               {#if isUploading}
-                <RefreshCw size={16} class="spinning" /> Ingesting Dataset...
+                <RefreshCw size={16} class="spinning" /> Evaluating Dataset...
               {:else}
-                <Upload size={16} /> Ingest File
+                <Upload size={16} /> Ingest & Evaluate
               {/if}
             </button>
           </div>
@@ -822,6 +823,12 @@
               <CheckCircle2 size={13} /> {liveResult.claims_count} Claim(s) Extracted
             </span>
           </div>
+
+          {#if liveResult.output_file}
+            <div style="font-size: 0.75rem; color: var(--primary); font-family: var(--font-mono); word-break: break-all; background: var(--bg-surface); padding: 0.4rem 0.6rem; border-radius: var(--radius-sm); border: 1px solid var(--border-subtle);">
+              📁 Saved to: {liveResult.output_file}
+            </div>
+          {/if}
 
           <!-- Extracted Claims -->
           <div style="display: flex; flex-direction: column; gap: 0.5rem;">

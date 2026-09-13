@@ -17,6 +17,7 @@ from jnaara.conflict.detector import ConflictDetector
 from jnaara.conflict.resolver import ConflictResolver
 from jnaara.db.engine import get_db_engine, get_session_factory, init_db
 from jnaara.db.repository import Repository
+from jnaara.evaluation.reporter import save_evaluation_report
 from jnaara.ingestion.ingestor import FactIngestor
 from jnaara.llm.factory import create_providers
 from jnaara.llm.mock import MockLLMProvider
@@ -81,21 +82,56 @@ def ingest(
         total_processed = 0
         total_skipped = 0
         total_conflicts = 0
+        total_claims = 0
+        recorded_results = []
 
         for seq_name, facts in sequences_to_run:
             console.print(f"\n[bold cyan]Processing {seq_name} ({len(facts)} facts) with strategy '{resolver.active_strategy}'...[/bold cyan]")
             for f in facts:
                 res = manager.process_fact(f)
+                conflicts_in_fact = sum(1 for _, c in res.results if c is not None)
+                recorded_results.append({
+                    "fact_id": res.fact_id,
+                    "content": f.content,
+                    "source": f.source,
+                    "source_reliability": f.source_reliability,
+                    "skipped": res.skipped,
+                    "claims": [c.model_dump() for c in res.claims],
+                    "decisions": [dec.model_dump() for dec, _ in res.results],
+                    "conflicts": [conf.model_dump() for _, conf in res.results if conf is not None],
+                })
                 if res.skipped:
                     total_skipped += 1
                 else:
                     total_processed += 1
-                    conflicts_in_fact = sum(1 for _, c in res.results if c is not None)
+                    total_claims += len(res.claims)
                     total_conflicts += conflicts_in_fact
                     status_badge = f"[yellow]{conflicts_in_fact} conflict(s)[/yellow]" if conflicts_in_fact else "[green]OK[/green]"
                     console.print(f"  Fact [bold]{f.id}[/bold]: {status_badge} ({len(res.claims)} claims extracted)")
 
         console.print(f"\n[bold green][OK] Ingestion Complete![/bold green] Processed: {total_processed}, Skipped: {total_skipped}, Conflicts: {total_conflicts}")
+
+        # Save evaluation report to output/ folder
+        try:
+            active_beliefs = repo.get_all_beliefs(status="active")
+            output_file = save_evaluation_report(
+                output_dir=settings.output_dir,
+                source_name=dataset_path.name,
+                sequence=sequence,
+                strategy=resolver.active_strategy,
+                summary={
+                    "total_submitted": total_processed + total_skipped,
+                    "total_processed": total_processed,
+                    "total_skipped": total_skipped,
+                    "total_claims": total_claims,
+                    "total_conflicts": total_conflicts,
+                },
+                results=recorded_results,
+                active_beliefs=[b.model_dump() for b in active_beliefs],
+            )
+            console.print(f"[bold cyan]Evaluation report saved to:[/bold cyan] {output_file}")
+        except Exception as exc:
+            console.print(f"[yellow]Notice: Could not save evaluation report: {exc}[/yellow]")
     finally:
         session.close()
 

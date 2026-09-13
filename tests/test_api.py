@@ -200,3 +200,39 @@ def test_reset_database(client):
     stats = client.get("/api/stats").json()
     assert stats["total_facts"] == 0
     assert stats["active_beliefs"] == 0
+
+
+def test_submit_fact_creates_evaluation_report(client):
+    res = client.post(
+        "/api/facts",
+        json={
+            "content": "NovaTech Inc. reported Q4 revenue of $480M.",
+            "source": "Official Press",
+            "source_reliability": "high",
+        },
+    )
+    assert res.status_code == 200
+    data = res.json()
+    assert data["output_file"] is not None
+    out_path = io.open(data["output_file"], "r", encoding="utf-8")
+    with out_path:
+        content = json.load(out_path)
+        assert content["summary"]["total_submitted"] == 1
+        assert "evaluation_timestamp" in content
+
+
+def test_upload_facts_creates_evaluation_report(client):
+    payload = {
+        "sequence_1_easy": [
+            {"id": "fact_test_1", "content": "Company A was founded in 2020.", "source": "filing"},
+        ]
+    }
+    file_bytes = json.dumps(payload).encode("utf-8")
+    files = {"file": ("my_eval_dataset.json", file_bytes, "application/json")}
+
+    res = client.post("/api/facts/upload?sequence=sequence_1_easy", files=files)
+    assert res.status_code == 200
+    data = res.json()
+    assert data["output_file"] is not None
+    assert "my_eval_dataset" in data["output_file"]
+    assert "sequence_1_easy" in data["output_file"]

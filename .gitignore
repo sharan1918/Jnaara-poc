@@ -65,3 +65,10 @@ web/node_modules/
 web/dist/
 .svelte-kit/
 .playwright-mcp/
+
+jnaara_memory_facts_dataset.json
+jnaara_takehome.docx
+
+# Evaluation outputs
+output/*.json
+!output/.gitkeep

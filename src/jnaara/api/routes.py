@@ -29,6 +29,7 @@ from jnaara.api.security import limiter
 from jnaara.belief.manager import BeliefManager
 from jnaara.conflict.resolver import ConflictResolver
 from jnaara.db.repository import Repository
+from jnaara.evaluation.reporter import save_evaluation_report
 from jnaara.models.domain import Fact, utc_now
 from jnaara.config import get_settings
 
@@ -156,6 +157,39 @@ def submit_fact(
         len(conflicts_resp),
     )
 
+    output_path_str = None
+    try:
+        settings = get_settings()
+        active_beliefs = repo.get_all_beliefs(status="active")
+        saved_file = save_evaluation_report(
+            output_dir=settings.output_dir,
+            source_name=f"fact_{result.fact_id}",
+            summary={
+                "total_submitted": 1,
+                "total_processed": 0 if result.skipped else 1,
+                "total_skipped": 1 if result.skipped else 0,
+                "total_claims": len(claims_resp),
+                "total_conflicts": len(conflicts_resp),
+            },
+            results=[
+                {
+                    "fact_id": result.fact_id,
+                    "content": payload.content,
+                    "source": payload.source,
+                    "source_reliability": payload.source_reliability,
+                    "skipped": result.skipped,
+                    "claims": [c.model_dump() for c in claims_resp],
+                    "decisions": [d.model_dump() for d in decisions_resp],
+                    "conflicts": [cf.model_dump() for cf in conflicts_resp],
+                }
+            ],
+            active_beliefs=[b.model_dump() for b in active_beliefs],
+            strategy=resolver.active_strategy,
+        )
+        output_path_str = str(saved_file)
+    except Exception as exc:
+        logger.warning("Could not write evaluation report: %s", exc)
+
     return FactProcessResponse(
         fact_id=result.fact_id,
         skipped=result.skipped,
@@ -163,6 +197,7 @@ def submit_fact(
         claims=claims_resp,
         decisions=decisions_resp,
         conflicts=conflicts_resp,
+        output_file=output_path_str,
     )
 
 
@@ -236,6 +271,30 @@ def submit_bulk_facts(
         total_conflicts,
     )
 
+    output_path_str = None
+    try:
+        settings = get_settings()
+        active_beliefs = repo.get_all_beliefs(status="active")
+        source_name = payload.sequence_name or "bulk_facts"
+        saved_file = save_evaluation_report(
+            output_dir=settings.output_dir,
+            source_name=source_name,
+            sequence=payload.sequence_name,
+            summary={
+                "total_submitted": len(facts_to_process),
+                "total_processed": len(facts_to_process) - total_skipped,
+                "total_skipped": total_skipped,
+                "total_claims": total_claims,
+                "total_conflicts": total_conflicts,
+            },
+            results=[r.model_dump() for r in results],
+            active_beliefs=[b.model_dump() for b in active_beliefs],
+            strategy=resolver.active_strategy,
+        )
+        output_path_str = str(saved_file)
+    except Exception as exc:
+        logger.warning("Could not write bulk evaluation report: %s", exc)
+
     return BulkProcessResponse(
         total_submitted=len(facts_to_process),
         total_processed=len(facts_to_process) - total_skipped,
@@ -243,6 +302,7 @@ def submit_bulk_facts(
         total_claims=total_claims,
         total_conflicts=total_conflicts,
         results=results,
+        output_file=output_path_str,
     )
 
 
@@ -413,6 +473,29 @@ async def upload_facts_file(
         total_conflicts,
     )
 
+    output_path_str = None
+    try:
+        settings = get_settings()
+        active_beliefs = repo.get_all_beliefs(status="active")
+        saved_file = save_evaluation_report(
+            output_dir=settings.output_dir,
+            source_name=file.filename or "uploaded_dataset.json",
+            sequence=sequence,
+            summary={
+                "total_submitted": len(facts_to_process),
+                "total_processed": len(facts_to_process) - total_skipped,
+                "total_skipped": total_skipped,
+                "total_claims": total_claims,
+                "total_conflicts": total_conflicts,
+            },
+            results=[r.model_dump() for r in results],
+            active_beliefs=[b.model_dump() for b in active_beliefs],
+            strategy=resolver.active_strategy,
+        )
+        output_path_str = str(saved_file)
+    except Exception as exc:
+        logger.warning("Could not write upload evaluation report: %s", exc)
+
     return BulkProcessResponse(
         total_submitted=len(facts_to_process),
         total_processed=len(facts_to_process) - total_skipped,
@@ -420,6 +503,7 @@ async def upload_facts_file(
         total_claims=total_claims,
         total_conflicts=total_conflicts,
         results=results,
+        output_file=output_path_str,
     )
 
 

@@ -19,6 +19,7 @@ class Settings(BaseSettings):
 
     # Application Persistence & Strategy
     db_path: Path = Path("data/jnaara.db")
+    output_dir: Path = Path("output")
     default_strategy: Literal["recency", "corroboration"] = "recency"
 
     model_config = SettingsConfigDict(
