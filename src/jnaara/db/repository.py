@@ -568,6 +568,164 @@ class Repository:
             decisions=decisions,
         )
 
+    def get_timeline(self) -> list[dict[str, Any]]:
+        """Construct the step-by-step chronological evolution timeline of facts and beliefs."""
+        facts_stmt = select(FactModel).order_by(FactModel.timestamp.asc())
+        facts = self.session.scalars(facts_stmt).all()
+        if not facts:
+            return []
+
+        all_claims = self.session.scalars(select(ClaimModel)).all()
+        claims_by_fact: dict[str, list[ClaimModel]] = {}
+        for c in all_claims:
+            claims_by_fact.setdefault(c.fact_id, []).append(c)
+
+        all_decisions = self.session.scalars(select(DecisionModel).order_by(DecisionModel.created_at.asc())).all()
+        decisions_by_fact: dict[str, list[DecisionModel]] = {}
+        for d in all_decisions:
+            decisions_by_fact.setdefault(d.fact_id, []).append(d)
+
+        all_conflicts = self.session.scalars(select(ConflictModel).order_by(ConflictModel.detected_at.asc())).all()
+        conflicts_by_claim: dict[str, list[ConflictModel]] = {}
+        for conf in all_conflicts:
+            conflicts_by_claim.setdefault(conf.incoming_claim_id, []).append(conf)
+
+        all_history = self.session.scalars(select(BeliefHistoryModel).order_by(BeliefHistoryModel.changed_at.asc())).all()
+        history_by_fact: dict[str, list[BeliefHistoryModel]] = {}
+        for h in all_history:
+            history_by_fact.setdefault(h.changed_by_fact_id, []).append(h)
+
+        all_beliefs = self.session.scalars(select(BeliefModel)).all()
+        belief_meta = {b.id: (b.entity, b.attribute) for b in all_beliefs}
+
+        timeline: list[dict[str, Any]] = []
+        running_beliefs: dict[str, dict[str, Any]] = {}
+
+        for idx, f in enumerate(facts):
+            step_num = idx + 1
+            f_claims = claims_by_fact.get(f.id, [])
+            f_decisions = decisions_by_fact.get(f.id, [])
+            f_history = history_by_fact.get(f.id, [])
+
+            f_claim_ids = {c.id for c in f_claims}
+            f_conflicts: list[Conflict] = []
+            for cid in f_claim_ids:
+                if cid in conflicts_by_claim:
+                    for cm in conflicts_by_claim[cid]:
+                        res = self.get_resolution(cm.id)
+                        f_conflicts.append(
+                            Conflict(
+                                id=cm.id,
+                                conflict_type=cm.conflict_type,  # type: ignore
+                                entity=cm.entity,
+                                attribute=cm.attribute,
+                                existing_belief_id=cm.existing_belief_id,
+                                incoming_claim_id=cm.incoming_claim_id,
+                                severity=cm.severity,  # type: ignore
+                                description=cm.description,
+                                detected_at=cm.detected_at,
+                                resolution=res,
+                            )
+                        )
+
+            updated_belief_ids: set[str] = set()
+            for h in f_history:
+                b_id = h.belief_id
+                updated_belief_ids.add(b_id)
+                ent, attr = belief_meta.get(b_id, ("Unknown", "Unknown"))
+                running_beliefs[b_id] = {
+                    "id": b_id,
+                    "entity": ent,
+                    "attribute": attr,
+                    "value": h.new_value,
+                    "confidence": h.new_confidence,
+                    "version": h.version,
+                    "last_updated_by": f.id,
+                    "status": "active",
+                }
+
+            snapshot = []
+            for b_id, b_data in running_beliefs.items():
+                snapshot.append({
+                    **b_data,
+                    "is_updated_in_this_step": b_id in updated_belief_ids,
+                })
+
+            snapshot.sort(key=lambda item: (item["entity"], item["attribute"]))
+
+            has_conflict = len(f_conflicts) > 0
+            if has_conflict:
+                conf = f_conflicts[0]
+                action_summary = f"⚡ Contradiction Resolved: {conf.entity} • {conf.attribute}"
+            elif f_history:
+                mut = f_history[0]
+                ent, attr = belief_meta.get(mut.belief_id, ("", ""))
+                if mut.old_value is not None:
+                    action_summary = f"⚡ Updated '{ent} • {attr}' to '{mut.new_value}'"
+                else:
+                    action_summary = f"🟢 Created Ground Truth: '{ent} • {attr}' = '{mut.new_value}'"
+            elif f_decisions:
+                action_summary = f"🔵 Action: {f_decisions[0].action}"
+            else:
+                action_summary = "ℹ️ Processed fact"
+
+            timeline.append({
+                "step_number": step_num,
+                "fact": {
+                    "id": f.id,
+                    "timestamp": f.timestamp,
+                    "source": f.source,
+                    "source_reliability": f.source_reliability,
+                    "content": f.content,
+                },
+                "claims": [
+                    Claim(
+                        id=c.id,
+                        entity=c.entity,
+                        attribute=c.attribute,
+                        value=c.value,
+                        normalized_value=c.normalized_value,
+                        unit=c.unit,
+                        temporal_scope=c.temporal_scope,
+                        claim_type=c.claim_type,  # type: ignore
+                        confidence=c.confidence,
+                        source_fact_id=c.fact_id,
+                    )
+                    for c in f_claims
+                ],
+                "decisions": [
+                    Decision(
+                        id=d.id,
+                        fact_id=d.fact_id,
+                        claim_id=d.claim_id,
+                        action=d.action,  # type: ignore
+                        reason=d.reason,
+                        tier=d.tier,  # type: ignore
+                        created_at=d.created_at,
+                    )
+                    for d in f_decisions
+                ],
+                "conflicts": f_conflicts,
+                "mutations": [
+                    {
+                        "version": h.version,
+                        "old_value": h.old_value,
+                        "new_value": h.new_value,
+                        "old_confidence": h.old_confidence,
+                        "new_confidence": h.new_confidence,
+                        "changed_by_fact_id": h.changed_by_fact_id,
+                        "reason": h.reason,
+                        "changed_at": h.changed_at or utc_now(),
+                    }
+                    for h in f_history
+                ],
+                "action_summary": action_summary,
+                "has_conflict": has_conflict,
+                "beliefs_snapshot": snapshot,
+            })
+
+        return timeline
+
     def clear_all(self) -> None:
         """Clear all tables (for database reset or testing)."""
         self.session.execute(delete(ResolutionModel))
@@ -579,3 +737,4 @@ class Repository:
         self.session.execute(delete(SourceModel))
         self.session.execute(delete(FactModel))
         self.session.commit()
+

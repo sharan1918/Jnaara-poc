@@ -27,6 +27,10 @@ from jnaara.api.schemas import (
     ResolutionResponse,
     StatsResponse,
     StrategySwitchRequest,
+    TimelineBeliefSnapshot,
+    TimelineFact,
+    TimelineResponse,
+    TimelineStep,
 )
 from jnaara.api.security import limiter
 from jnaara.belief.manager import BeliefManager
@@ -686,6 +690,85 @@ def get_stats(
         primary_llm=settings.primary_llm,
         secondary_llm=settings.secondary_llm,
     )
+
+
+@router.get(
+    "/timeline",
+    response_model=TimelineResponse,
+    summary="Get sequential chronological timeline of facts and evolving beliefs",
+)
+@limiter.limit("120/minute")
+def get_timeline(
+    request: Request,
+    session: Session = Depends(get_db),
+):
+    """Retrieve the step-by-step sequential evolution of facts, extractions, conflict resolutions, and running beliefs."""
+    repo = Repository(session)
+    raw_steps = repo.get_timeline()
+
+    steps: list[TimelineStep] = []
+    conflicts_count = 0
+
+    for s in raw_steps:
+        claims_resp = [_to_claim_response(c) for c in s["claims"]]
+        decisions_resp = [_to_decision_response(d) for d in s["decisions"]]
+        conflicts_resp = [_to_conflict_response(cf) for cf in s["conflicts"]]
+        mutations_resp = [
+            ProvenanceHistoryItem(
+                version=m["version"],
+                old_value=m["old_value"],
+                new_value=m["new_value"],
+                old_confidence=m["old_confidence"],
+                new_confidence=m["new_confidence"],
+                changed_by_fact_id=m["changed_by_fact_id"],
+                reason=m["reason"],
+                changed_at=m["changed_at"],
+            )
+            for m in s["mutations"]
+        ]
+        snapshots_resp = [
+            TimelineBeliefSnapshot(
+                id=b["id"],
+                entity=b["entity"],
+                attribute=b["attribute"],
+                value=b["value"],
+                confidence=b["confidence"],
+                version=b["version"],
+                is_updated_in_this_step=b["is_updated_in_this_step"],
+                status=b["status"],
+            )
+            for b in s["beliefs_snapshot"]
+        ]
+
+        if s["has_conflict"]:
+            conflicts_count += len(conflicts_resp)
+
+        steps.append(
+            TimelineStep(
+                step_number=s["step_number"],
+                fact=TimelineFact(
+                    id=s["fact"]["id"],
+                    timestamp=s["fact"]["timestamp"],
+                    source=s["fact"]["source"],
+                    source_reliability=s["fact"]["source_reliability"],
+                    content=s["fact"]["content"],
+                ),
+                claims=claims_resp,
+                decisions=decisions_resp,
+                conflicts=conflicts_resp,
+                mutations=mutations_resp,
+                action_summary=s["action_summary"],
+                has_conflict=s["has_conflict"],
+                beliefs_snapshot=snapshots_resp,
+            )
+        )
+
+    return TimelineResponse(
+        total_steps=len(steps),
+        total_conflicts_resolved=conflicts_count,
+        steps=steps,
+    )
+
 
 
 @router.post(

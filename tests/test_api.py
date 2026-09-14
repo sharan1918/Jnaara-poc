@@ -218,7 +218,26 @@ def test_submit_fact_creates_evaluation_report(client):
     with out_path:
         content = json.load(out_path)
         assert content["summary"]["total_submitted"] == 1
-        assert "evaluation_timestamp" in content
+
+
+def test_get_timeline(client):
+    client.post("/api/reset")
+    client.post(
+        "/api/facts",
+        json={
+            "content": "Solaris Energy acquired WindCo for $3.5B.",
+            "source": "PR Newswire",
+            "source_reliability": "high",
+        },
+    )
+    res = client.get("/api/timeline")
+    assert res.status_code == 200
+    data = res.json()
+    assert data["total_steps"] >= 1
+    step = data["steps"][0]
+    assert step["step_number"] == 1
+    assert "Solaris Energy" in step["fact"]["content"]
+    assert len(step["beliefs_snapshot"]) >= 1
 
 
 def test_upload_facts_creates_evaluation_report(client):

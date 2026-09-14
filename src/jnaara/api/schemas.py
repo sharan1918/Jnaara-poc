@@ -207,3 +207,49 @@ class GenericSuccessResponse(BaseModel):
 
     message: str
     status: str = "success"
+
+
+class TimelineFact(BaseModel):
+    """Fact metadata inside a timeline step."""
+
+    id: str
+    timestamp: datetime
+    source: str
+    source_reliability: str
+    content: str
+
+
+class TimelineBeliefSnapshot(BaseModel):
+    """State of a held belief at a specific point in time."""
+
+    id: str
+    entity: str
+    attribute: str
+    value: str
+    confidence: float
+    version: int
+    is_updated_in_this_step: bool = False
+    status: str = "active"
+
+
+class TimelineStep(BaseModel):
+    """Single step in the sequential fact processing timeline."""
+
+    step_number: int
+    fact: TimelineFact
+    claims: list[ClaimResponse]
+    decisions: list[DecisionResponse]
+    conflicts: list[ConflictResponse]
+    mutations: list[ProvenanceHistoryItem]
+    action_summary: str
+    has_conflict: bool = False
+    beliefs_snapshot: list[TimelineBeliefSnapshot] = []
+
+
+class TimelineResponse(BaseModel):
+    """Full sequential timeline of facts and belief evolution."""
+
+    total_steps: int
+    total_conflicts_resolved: int
+    steps: list[TimelineStep]
+

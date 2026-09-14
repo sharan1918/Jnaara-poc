@@ -17,14 +17,83 @@
     FileText,
     Sparkles,
     ChevronRight,
+    ChevronLeft,
     X,
     Clock,
     ArrowUpDown,
     Table,
-    LayoutGrid
+    LayoutGrid,
+    Play,
+    Pause,
+    SkipBack,
+    SkipForward,
+    GitCommit,
+    SlidersHorizontal
   } from 'lucide-svelte';
 
   // Types
+  interface TimelineFact {
+    id: string;
+    timestamp: string;
+    source: string;
+    source_reliability: string;
+    content: string;
+  }
+
+  interface TimelineBeliefSnapshot {
+    id: string;
+    entity: string;
+    attribute: string;
+    value: string;
+    confidence: number;
+    version: number;
+    is_updated_in_this_step: boolean;
+    status: string;
+  }
+
+  interface TimelineStep {
+    step_number: number;
+    fact: TimelineFact;
+    claims: Array<{
+      id: string;
+      entity: string;
+      attribute: string;
+      value: string;
+      claim_type: string;
+      confidence: number;
+    }>;
+    decisions: Array<{
+      id: string;
+      action: string;
+      reason: string;
+      tier: string;
+    }>;
+    conflicts: Array<{
+      id: string;
+      entity: string;
+      attribute: string;
+      conflict_type: string;
+      description: string;
+      resolution?: {
+        winner: string;
+        strategy_used: string;
+        rationale: string;
+      };
+    }>;
+    mutations: Array<{
+      version: number;
+      old_value: string | null;
+      new_value: string;
+      old_confidence: number | null;
+      new_confidence: number;
+      changed_by_fact_id: string;
+      reason: string | null;
+    }>;
+    action_summary: string;
+    has_conflict: boolean;
+    beliefs_snapshot: TimelineBeliefSnapshot[];
+  }
+
   interface Belief {
     id: string;
     entity: string;
@@ -125,7 +194,65 @@
   });
 
   let activeTab = $state<'single' | 'upload'>('single');
-  let activeView = $state<'beliefs' | 'conflicts'>('beliefs');
+  let activeView = $state<'timeline' | 'beliefs' | 'conflicts'>('timeline');
+
+  // Timeline State & Playback
+  let timelineSteps = $state<TimelineStep[]>([]);
+  let currentStepIndex = $state(0);
+  let isPlayingTimeline = $state(false);
+  let playIntervalTimer: any = null;
+  let timelineMode = $state<'stepper' | 'stream'>('stepper');
+  let currentStep = $derived(timelineSteps[currentStepIndex] || null);
+
+  function goToStep(index: number) {
+    if (timelineSteps.length === 0) return;
+    currentStepIndex = Math.max(0, Math.min(index, timelineSteps.length - 1));
+  }
+
+  function nextStep() {
+    if (currentStepIndex < timelineSteps.length - 1) {
+      currentStepIndex++;
+    } else if (isPlayingTimeline) {
+      pauseTimeline();
+    }
+  }
+
+  function prevStep() {
+    if (currentStepIndex > 0) {
+      currentStepIndex--;
+    }
+  }
+
+  function togglePlayTimeline() {
+    if (isPlayingTimeline) {
+      pauseTimeline();
+    } else {
+      playTimeline();
+    }
+  }
+
+  function playTimeline() {
+    if (timelineSteps.length === 0) return;
+    if (currentStepIndex >= timelineSteps.length - 1) {
+      currentStepIndex = 0;
+    }
+    isPlayingTimeline = true;
+    playIntervalTimer = setInterval(() => {
+      if (currentStepIndex < timelineSteps.length - 1) {
+        currentStepIndex++;
+      } else {
+        pauseTimeline();
+      }
+    }, 2000);
+  }
+
+  function pauseTimeline() {
+    isPlayingTimeline = false;
+    if (playIntervalTimer) {
+      clearInterval(playIntervalTimer);
+      playIntervalTimer = null;
+    }
+  }
 
   // Single Fact Input
   let factContent = $state('');
@@ -425,8 +552,23 @@
     }
   }
 
+  async function fetchTimeline() {
+    try {
+      const res = await fetch('/api/timeline');
+      if (res.ok) {
+        const data = await res.json();
+        timelineSteps = data.steps;
+        if (timelineSteps.length > 0 && currentStepIndex >= timelineSteps.length) {
+          currentStepIndex = timelineSteps.length - 1;
+        }
+      }
+    } catch (err) {
+      console.error('Failed to fetch timeline:', err);
+    }
+  }
+
   async function refreshAll() {
-    await Promise.all([fetchStats(), fetchBeliefs(), fetchConflicts()]);
+    await Promise.all([fetchStats(), fetchBeliefs(), fetchConflicts(), fetchTimeline()]);
   }
 
   async function handleStrategyChange(newStrat: string) {
@@ -917,17 +1059,24 @@
         <div class="tabs-nav" style="width: auto;">
           <button
             class="tab-btn"
+            class:active={activeView === 'timeline'}
+            onclick={() => (activeView = 'timeline')}
+          >
+            <Clock size={13} /> Step-by-Step Evolution ({timelineSteps.length})
+          </button>
+          <button
+            class="tab-btn"
             class:active={activeView === 'beliefs'}
             onclick={() => (activeView = 'beliefs')}
           >
-            Active Beliefs ({beliefs.length})
+            <Layers size={13} /> Active Beliefs ({beliefs.length})
           </button>
           <button
             class="tab-btn"
             class:active={activeView === 'conflicts'}
             onclick={() => (activeView = 'conflicts')}
           >
-            Conflict Audit Log ({conflicts.length})
+            <ShieldCheck size={13} /> Conflict Audit Log ({conflicts.length})
           </button>
         </div>
 
@@ -994,8 +1143,314 @@
       </div>
     </div>
 
+    <!-- View 1: Step-by-Step Evolution Timeline Replay -->
+    {#if activeView === 'timeline'}
+      {#if timelineSteps.length === 0}
+        <div style="text-align: center; padding: 3rem; color: var(--text-muted); display: flex; flex-direction: column; align-items: center; gap: 0.75rem;">
+          <Clock size={36} color="var(--border-strong)" />
+          <div>
+            <div style="font-weight: 600; font-size: 0.95rem;">No sequential facts recorded yet</div>
+            <div style="font-size: 0.8rem; margin-top: 0.25rem;">Submit facts on the left or upload a sequence dataset to watch the belief engine evolve step-by-step.</div>
+          </div>
+        </div>
+      {:else}
+        <div class="timeline-player-card">
+          <!-- Playback Controls Bar -->
+          <div class="timeline-player-bar">
+            <div class="timeline-controls">
+              <button
+                class="btn-icon"
+                onclick={() => goToStep(0)}
+                disabled={currentStepIndex === 0}
+                title="Jump to First Step"
+              >
+                <SkipBack size={15} />
+              </button>
+              <button
+                class="btn-icon"
+                onclick={prevStep}
+                disabled={currentStepIndex === 0}
+                title="Previous Fact"
+              >
+                <ChevronLeft size={16} />
+              </button>
+              <button
+                class="btn btn-primary"
+                style="padding: 0.35rem 0.85rem; font-size: 0.8rem; display: inline-flex; align-items: center; gap: 0.4rem;"
+                onclick={togglePlayTimeline}
+                title={isPlayingTimeline ? "Pause Auto-Playback" : "Auto-Play Step by Step"}
+              >
+                {#if isPlayingTimeline}
+                  <Pause size={13} /> Pause Replay
+                {:else}
+                  <Play size={13} /> Play Step-by-Step
+                {/if}
+              </button>
+              <button
+                class="btn-icon"
+                onclick={nextStep}
+                disabled={currentStepIndex >= timelineSteps.length - 1}
+                title="Next Fact"
+              >
+                <ChevronRight size={16} />
+              </button>
+              <button
+                class="btn-icon"
+                onclick={() => goToStep(timelineSteps.length - 1)}
+                disabled={currentStepIndex >= timelineSteps.length - 1}
+                title="Jump to Latest Step"
+              >
+                <SkipForward size={15} />
+              </button>
+            </div>
+
+            <div style="display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap;">
+              <div style="font-size: 0.85rem; font-weight: 700; color: var(--text-primary); display: flex; align-items: center; gap: 0.4rem;">
+                <span class="pill pill-primary" style="font-size: 0.72rem;">Step {currentStepIndex + 1} of {timelineSteps.length}</span>
+                <span>Fact {currentStep?.fact.id}</span>
+                {#if currentStep?.has_conflict}
+                  <span class="pill pill-warning" style="font-size: 0.68rem;">⚡ Contradiction Step</span>
+                {/if}
+              </div>
+
+              <!-- Stepper vs Stream Toggle -->
+              <div class="view-mode-toggle">
+                <button
+                  class="view-mode-btn"
+                  class:active={timelineMode === 'stepper'}
+                  onclick={() => (timelineMode = 'stepper')}
+                  title="Interactive Step Player"
+                >
+                  <SlidersHorizontal size={13} /> Step Player
+                </button>
+                <button
+                  class="view-mode-btn"
+                  class:active={timelineMode === 'stream'}
+                  onclick={() => (timelineMode = 'stream')}
+                  title="Full Continuous Story Stream"
+                >
+                  <FileText size={13} /> Full Stream
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Step Scrubber Ribbon -->
+          <div class="timeline-scrubber">
+            {#each timelineSteps as s, sIdx}
+              <button
+                class="timeline-step-pill"
+                class:active={sIdx === currentStepIndex}
+                class:has-conflict={s.has_conflict}
+                onclick={() => goToStep(sIdx)}
+                title="Step {s.step_number}: Fact {s.fact.id} ({s.action_summary})"
+              >
+                <span>#{s.step_number}</span>
+                <span>{s.fact.id}</span>
+                {#if s.has_conflict}
+                  <span style="color: var(--warning); font-size: 0.65rem;">⚡</span>
+                {/if}
+              </button>
+            {/each}
+          </div>
+
+          <!-- Mode 1: Interactive Stepper (Split View) -->
+          {#if timelineMode === 'stepper' && currentStep}
+            <div class="timeline-split-view">
+              <!-- Left: Fact Ingestion & Engine Action -->
+              <div class="timeline-fact-box">
+                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.4rem;">
+                  <div style="display: flex; align-items: center; gap: 0.45rem;">
+                    <span class="seq-num-badge" style="font-size: 0.75rem;">Step #{currentStep.step_number}</span>
+                    <strong style="font-size: 0.9rem; color: var(--text-primary);">Incoming Fact: {currentStep.fact.id}</strong>
+                  </div>
+                  <div style="display: flex; align-items: center; gap: 0.35rem;">
+                    <span class="pill pill-neutral" style="font-size: 0.7rem;">{currentStep.fact.source}</span>
+                    <span class="pill pill-{currentStep.fact.source_reliability === 'high' ? 'success' : currentStep.fact.source_reliability === 'low' ? 'danger' : 'warning'}" style="font-size: 0.65rem;">
+                      {currentStep.fact.source_reliability.toUpperCase()}
+                    </span>
+                  </div>
+                </div>
+
+                <div class="timeline-quote">
+                  "{currentStep.fact.content}"
+                </div>
+
+                <!-- Claims Extracted -->
+                {#if currentStep.claims.length > 0}
+                  <div style="display: flex; flex-direction: column; gap: 0.35rem;">
+                    <span style="font-size: 0.74rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em;">
+                      Extracted Claims ({currentStep.claims.length})
+                    </span>
+                    <div style="display: flex; flex-wrap: wrap; gap: 0.4rem;">
+                      {#each currentStep.claims as clm}
+                        <div style="background: var(--bg-surface); border: 1px solid var(--border-subtle); padding: 0.3rem 0.55rem; border-radius: var(--radius-sm); font-size: 0.76rem; display: flex; align-items: center; gap: 0.35rem;">
+                          <strong style="color: var(--text-primary);">{clm.entity} &bull; {clm.attribute}:</strong>
+                          <span style="color: var(--primary); font-family: monospace;">{clm.value}</span>
+                          <span style="opacity: 0.7; font-size: 0.7rem;">({(clm.confidence * 100).toFixed(0)}%)</span>
+                        </div>
+                      {/each}
+                    </div>
+                  </div>
+                {/if}
+
+                <!-- Impact / Action Taken -->
+                <div style="display: flex; flex-direction: column; gap: 0.35rem; margin-top: 0.25rem;">
+                  <span style="font-size: 0.74rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em;">
+                    Engine Decision & Resolution
+                  </span>
+                  {#if currentStep.has_conflict && currentStep.conflicts.length > 0}
+                    {@const c = currentStep.conflicts[0]}
+                    <div class="timeline-action-card conflict">
+                      <div style="font-weight: 700; color: var(--warning); display: flex; align-items: center; gap: 0.4rem;">
+                        <AlertTriangle size={14} /> Contradiction Detected & Resolved!
+                      </div>
+                      <div style="font-size: 0.8rem; color: var(--text-secondary); line-height: 1.35;">
+                        {c.description}
+                      </div>
+                      {#if c.resolution}
+                        <div style="background: var(--bg-surface); padding: 0.45rem 0.65rem; border-radius: var(--radius-sm); font-size: 0.76rem; border: 1px solid rgba(245, 158, 11, 0.3); margin-top: 0.2rem;">
+                          <div>
+                            <strong>Decision:</strong> Winner is <span class="pill pill-success" style="font-size: 0.65rem;">{c.resolution.winner.replace('_', ' ').toUpperCase()}</span> via <em>{c.resolution.strategy_used.replace('_', ' ')}</em>
+                          </div>
+                          {#if c.resolution.rationale}
+                            <div style="color: var(--text-secondary); font-size: 0.74rem; margin-top: 0.2rem;">
+                              {c.resolution.rationale}
+                            </div>
+                          {/if}
+                        </div>
+                      {/if}
+                    </div>
+                  {:else if currentStep.mutations.length > 0}
+                    {@const m = currentStep.mutations[0]}
+                    <div class="timeline-action-card create">
+                      <div style="font-weight: 700; color: var(--success); display: flex; align-items: center; gap: 0.4rem;">
+                        <CheckCircle2 size={14} />
+                        {#if m.old_value}
+                          Ground Truth Updated: {m.old_value} → {m.new_value}
+                        {:else}
+                          Initial Belief Established: {m.new_value}
+                        {/if}
+                      </div>
+                      {#if m.reason}
+                        <div style="font-size: 0.78rem; color: var(--text-secondary);">
+                          {m.reason}
+                        </div>
+                      {/if}
+                    </div>
+                  {:else if currentStep.decisions.length > 0}
+                    <div class="timeline-action-card neutral">
+                      <div style="font-size: 0.8rem; display: flex; align-items: center; gap: 0.4rem;">
+                        <span class="pill pill-primary" style="font-size: 0.65rem;">{currentStep.decisions[0].action}</span>
+                        <span style="color: var(--text-secondary);">{currentStep.decisions[0].reason}</span>
+                      </div>
+                    </div>
+                  {:else}
+                    <div class="timeline-action-card neutral" style="font-size: 0.8rem; color: var(--text-muted);">
+                      Fact ingested into context memory.
+                    </div>
+                  {/if}
+                </div>
+              </div>
+
+              <!-- Right: Evolving Beliefs Snapshot -->
+              <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                  <div>
+                    <div style="font-weight: 700; font-size: 0.95rem; color: var(--text-primary); display: flex; align-items: center; gap: 0.45rem;">
+                      <Database size={16} color="var(--primary)" />
+                      <span>Belief State at Step #{currentStep.step_number}</span>
+                    </div>
+                    <div style="font-size: 0.75rem; color: var(--text-muted);">
+                      {currentStep.beliefs_snapshot.length} active belief{currentStep.beliefs_snapshot.length > 1 ? 's' : ''} held after this step
+                    </div>
+                  </div>
+                </div>
+
+                {#if currentStep.beliefs_snapshot.length === 0}
+                  <div style="text-align: center; padding: 2rem; color: var(--text-muted); font-size: 0.85rem; background: var(--bg-surface-subtle); border-radius: var(--radius-md);">
+                    No beliefs formed yet at this step.
+                  </div>
+                {:else}
+                  <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 0.75rem; max-height: 480px; overflow-y: auto; padding-right: 0.25rem;">
+                    {#each currentStep.beliefs_snapshot as b}
+                      <div
+                        class="timeline-belief-card"
+                        class:step-updated={b.is_updated_in_this_step && !currentStep.has_conflict}
+                        class:step-conflict-updated={b.is_updated_in_this_step && currentStep.has_conflict}
+                      >
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                          <span style="font-size: 0.72rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">
+                            {b.attribute}
+                          </span>
+                          {#if b.is_updated_in_this_step}
+                            <span class="pill pill-{currentStep.has_conflict ? 'warning' : 'success'}" style="font-size: 0.65rem; font-weight: 700;">
+                              ⚡ Updated Now
+                            </span>
+                          {:else}
+                            <span class="pill pill-neutral" style="font-size: 0.65rem;">v{b.version}</span>
+                          {/if}
+                        </div>
+
+                        <div style="font-size: 0.78rem; font-weight: 600; color: var(--text-secondary);">
+                          {b.entity}
+                        </div>
+
+                        <div style="font-size: 0.95rem; font-weight: 700; color: var(--text-primary); line-height: 1.35;">
+                          {b.value}
+                        </div>
+
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-top: auto; padding-top: 0.35rem; border-top: 1px solid var(--border-subtle); font-size: 0.72rem; color: var(--text-muted);">
+                          <span>Confidence: {(b.confidence * 100).toFixed(0)}%</span>
+                        </div>
+                      </div>
+                    {/each}
+                  </div>
+                {/if}
+              </div>
+            </div>
+
+          <!-- Mode 2: Full Continuous Narrative Stream -->
+          {:else if timelineMode === 'stream'}
+            <div class="timeline-stream-container" style="margin-top: 0.5rem;">
+              {#each timelineSteps as s}
+                <div class="timeline-stream-item" class:has-conflict={s.has_conflict}>
+                  <div class="timeline-stream-dot">#{s.step_number}</div>
+
+                  <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
+                    <div style="display: flex; align-items: center; gap: 0.45rem;">
+                      <strong style="color: var(--text-primary); font-size: 0.9rem;">Step {s.step_number}: Fact {s.fact.id}</strong>
+                      <span class="pill pill-neutral" style="font-size: 0.7rem;">{s.fact.source}</span>
+                      <span class="pill pill-{s.fact.source_reliability === 'high' ? 'success' : s.fact.source_reliability === 'low' ? 'danger' : 'warning'}" style="font-size: 0.65rem;">
+                        {s.fact.source_reliability.toUpperCase()}
+                      </span>
+                    </div>
+                    {#if s.has_conflict}
+                      <span class="pill pill-warning" style="font-size: 0.7rem;">⚡ Contradiction Resolved</span>
+                    {/if}
+                  </div>
+
+                  <div style="font-style: italic; color: var(--text-secondary); font-size: 0.88rem; line-height: 1.4; background: var(--bg-surface-subtle); padding: 0.65rem 0.85rem; border-radius: var(--radius-sm);">
+                    "{s.fact.content}"
+                  </div>
+
+                  <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem; border-top: 1px solid var(--border-subtle); padding-top: 0.5rem; font-size: 0.8rem;">
+                    <div>
+                      <strong style="color: var(--text-primary);">{s.action_summary}</strong>
+                    </div>
+                    <div style="color: var(--text-muted); font-size: 0.75rem;">
+                      {s.beliefs_snapshot.length} active belief{s.beliefs_snapshot.length > 1 ? 's' : ''} held after this step
+                    </div>
+                  </div>
+                </div>
+              {/each}
+            </div>
+          {/if}
+        </div>
+      {/if}
+
     <!-- Active Beliefs View -->
-    {#if activeView === 'beliefs'}
+    {:else if activeView === 'beliefs'}
       {#if beliefs.length === 0}
         <div style="text-align: center; padding: 3rem; color: var(--text-muted);">
           No active beliefs held. Ingest a fact or dataset to begin building the belief model.
