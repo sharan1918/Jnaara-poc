@@ -19,7 +19,9 @@
     ChevronRight,
     X,
     Clock,
-    ArrowUpDown
+    ArrowUpDown,
+    Table,
+    LayoutGrid
   } from 'lucide-svelte';
 
   // Types
@@ -147,7 +149,7 @@
   let selectedEntityFilter = $state<string>('all');
   let selectedFactFilter = $state<string>('all');
   let sortBy = $state<'sequence' | 'entity' | 'conflicts' | 'confidence'>('sequence');
-  let repositoryDisplayMode = $state<'dossier' | 'grid'>('dossier');
+  let repositoryDisplayMode = $state<'dossier' | 'grid' | 'table'>('dossier');
 
   // Fact Sequence Helper
   function parseFactNum(id: string): number {
@@ -310,13 +312,27 @@
 
   // Top Contradiction Highlights
   let topHighlights = $derived.by(() => {
-    return conflicts.slice(0, 3).map((c) => ({
-      entity: c.entity,
-      attribute: c.attribute,
-      description: c.description,
-      winner: c.resolution?.winner,
-      rationale: c.resolution?.rationale
-    }));
+    return conflicts.slice(0, 3).map((c) => {
+      const match = beliefs.find(
+        (b) => b.entity.toLowerCase() === c.entity.toLowerCase() && b.attribute.toLowerCase() === c.attribute.toLowerCase()
+      );
+      let winnerLabel = 'Incoming Claim Accepted';
+      if (c.resolution?.winner === 'existing_belief') {
+        winnerLabel = 'Existing Ground Truth Retained';
+      } else if (c.resolution?.winner === 'both_retained') {
+        winnerLabel = 'Both Contextualized';
+      }
+      return {
+        entity: c.entity,
+        attribute: c.attribute,
+        description: c.description,
+        winner: c.resolution?.winner,
+        winnerLabel,
+        establishedValue: match ? match.value : null,
+        strategy: c.resolution?.strategy_used || 'source_credibility',
+        rationale: c.resolution?.rationale
+      };
+    });
   });
 
   // Provenance Modal
@@ -921,9 +937,17 @@
               class="view-mode-btn"
               class:active={repositoryDisplayMode === 'dossier'}
               onclick={() => (repositoryDisplayMode = 'dossier')}
-              title="Group beliefs by company / entity"
+              title="Group beliefs by company / entity cards"
             >
-              <Layers size={13} /> By Entity
+              <Layers size={13} /> Dossier View
+            </button>
+            <button
+              class="view-mode-btn"
+              class:active={repositoryDisplayMode === 'table'}
+              onclick={() => (repositoryDisplayMode = 'table')}
+              title="Spreadsheet Table View"
+            >
+              <Table size={13} /> Table
             </button>
             <button
               class="view-mode-btn"
@@ -931,7 +955,7 @@
               onclick={() => (repositoryDisplayMode = 'grid')}
               title="Flat Card Grid"
             >
-              <Database size={13} /> Flat Grid
+              <LayoutGrid size={13} /> Flat Grid
             </button>
           </div>
 
@@ -991,14 +1015,19 @@
                     <span>{h.entity} &bull; {h.attribute}</span>
                     <span class="pill pill-warning" style="font-size: 0.65rem;">Resolved</span>
                   </div>
-                  <div style="color: var(--text-secondary); font-size: 0.78rem; line-height: 1.35; margin-top: 0.2rem;">
+                  <div style="color: var(--text-secondary); font-size: 0.78rem; line-height: 1.35; margin-top: 0.15rem;">
                     {h.description}
                   </div>
-                  {#if h.winner}
-                    <div style="font-size: 0.75rem; color: var(--success); font-weight: 600; margin-top: 0.25rem;">
-                      Winning Claim: {h.winner.replace('_', ' ')}
+                  <div class="highlight-decision-box">
+                    {#if h.establishedValue}
+                      <div style="font-weight: 700; color: var(--success); display: flex; align-items: center; gap: 0.35rem;">
+                        <CheckCircle2 size={13} /> Ground Truth: {h.establishedValue}
+                      </div>
+                    {/if}
+                    <div style="color: var(--text-secondary); font-size: 0.74rem;">
+                      Decision: <strong>{h.winnerLabel}</strong> ({h.strategy.replace('_', ' ')})
                     </div>
-                  {/if}
+                  </div>
                 </div>
               {/each}
             </div>
@@ -1008,7 +1037,7 @@
         <!-- Entity Filter Chips -->
         {#if entityList.length > 1}
           <div class="entity-filter-bar">
-            <span style="font-size: 0.78rem; font-weight: 600; color: var(--text-muted); margin-right: 0.25rem;">Entity:</span>
+            <span style="font-size: 0.78rem; font-weight: 600; color: var(--text-muted); margin-right: 0.25rem;">Filter Entity:</span>
             <button
               class="entity-chip"
               class:active={selectedEntityFilter === 'all'}
@@ -1032,37 +1061,7 @@
           </div>
         {/if}
 
-        <!-- Sequential Fact Timeline Bar (E1 -> E27) -->
-        {#if availableFactSequence.length > 0}
-          <div class="seq-filter-bar">
-            <span style="font-size: 0.78rem; font-weight: 600; color: var(--text-muted); display: inline-flex; align-items: center; gap: 0.3rem; margin-right: 0.25rem;">
-              <Clock size={13} /> Sequence:
-            </span>
-            <button
-              class="seq-pill"
-              class:active={selectedFactFilter === 'all'}
-              onclick={() => (selectedFactFilter = 'all')}
-            >
-              All Steps ({availableFactSequence.length})
-            </button>
-            {#each availableFactSequence as f}
-              <button
-                class="seq-pill"
-                class:active={selectedFactFilter === f.id}
-                class:has-conflict={f.hasConflicts}
-                onclick={() => (selectedFactFilter = f.id)}
-                title="Filter by Fact {f.id} ({f.count} belief{f.count > 1 ? 's' : ''})"
-              >
-                <span>{f.id}</span>
-                {#if f.hasConflicts}
-                  <span style="color: var(--warning); font-size: 0.65rem;">⚡</span>
-                {/if}
-              </button>
-            {/each}
-          </div>
-        {/if}
-
-        <!-- Mode 1: Entity Dossiers View (Default) -->
+        <!-- Mode 1: Entity Dossiers View (Default Cards) -->
         {#if repositoryDisplayMode === 'dossier'}
           <div style="display: flex; flex-direction: column; gap: 1.25rem; margin-top: 0.5rem;">
             {#each groupedByEntity as group}
@@ -1071,7 +1070,7 @@
                   <div class="entity-dossier-title">
                     <Layers size={18} color="var(--primary)" />
                     <span>{group.entity}</span>
-                    <span class="pill pill-neutral" style="font-size: 0.72rem;">{group.items.length} Tracked Attributes</span>
+                    <span class="pill pill-neutral" style="font-size: 0.72rem;">{group.items.length} Tracked Attribute{group.items.length > 1 ? 's' : ''}</span>
                     {#if group.conflictsCount > 0}
                       <span class="pill pill-warning" style="font-size: 0.72rem;">
                         <AlertTriangle size={12} /> {group.conflictsCount} Contradiction{group.conflictsCount > 1 ? 's' : ''} Resolved
@@ -1080,78 +1079,132 @@
                   </div>
                 </div>
 
-                <div class="entity-dossier-table-wrapper">
-                  <table class="entity-dossier-table">
-                    <thead>
-                      <tr>
-                        <th style="width: 15%;">Seq / Fact</th>
-                        <th style="width: 25%;">Attribute</th>
-                        <th style="width: 32%;">Established Value</th>
-                        <th style="width: 12%;">Confidence</th>
-                        <th style="width: 8%;">Status</th>
-                        <th style="width: 8%; text-align: right;">Audit</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {#each group.items as b}
-                        {@const info = getFactSequenceInfo(b)}
-                        <tr>
-                          <td>
-                            <div style="display: flex; align-items: center; gap: 0.35rem; flex-wrap: wrap;">
-                              <span class="seq-num-badge" title="Sequential processing order">#{info.sequenceNum < 9999 ? info.sequenceNum : '?'}</span>
-                              <span class="fact-tag origin" title="Origin Fact">{info.originFactId}</span>
-                              {#if info.hasEvolution && info.allFactIds.length > 1}
-                                <span style="color: var(--text-muted); font-size: 0.65rem;">→</span>
-                                <span class="fact-tag latest" title="Latest updating fact">{info.latestFactId}</span>
-                              {/if}
-                            </div>
-                          </td>
-                          <td>
-                            <span style="font-weight: 600; color: var(--text-primary);">{b.attribute}</span>
-                          </td>
-                          <td>
-                            <span class="belief-value" style="display: inline-block; max-width: 100%;">
-                              {b.value}
-                            </span>
-                          </td>
-                          <td>
-                            <div style="display: flex; align-items: center; gap: 0.5rem;">
-                              <span style="font-size: 0.78rem; font-weight: 600; min-width: 32px;">{(b.confidence * 100).toFixed(0)}%</span>
-                              <div class="confidence-track" style="width: 60px; height: 5px;">
-                                <div class="confidence-fill" style="width: {b.confidence * 100}%;"></div>
-                              </div>
-                            </div>
-                          </td>
-                          <td>
-                            {#if b.contradicting_fact_ids.length > 0 || b.version > 1}
-                              <span class="pill pill-warning" style="font-size: 0.68rem;" title="{b.contradicting_fact_ids.length} contradiction(s) resolved">
-                                ⚡ v{b.version} Resolved
-                              </span>
-                            {:else}
-                              <span class="pill pill-neutral" style="font-size: 0.68rem;">
-                                v{b.version} Clean
-                              </span>
-                            {/if}
-                          </td>
-                          <td style="text-align: right;">
-                            <button
-                              class="btn btn-secondary"
-                              style="padding: 0.3rem 0.65rem; font-size: 0.75rem;"
-                              onclick={() => openProvenance(b.id)}
-                            >
-                              <History size={12} /> Provenance
-                            </button>
-                          </td>
-                        </tr>
-                      {/each}
-                    </tbody>
-                  </table>
+                <div class="dossier-grid">
+                  {#each group.items as b}
+                    {@const info = getFactSequenceInfo(b)}
+                    <div class="dossier-belief-card" class:resolved-conflict={b.contradicting_fact_ids.length > 0 || b.version > 1}>
+                      <div class="dossier-belief-header">
+                        <span class="dossier-attribute-label">{b.attribute}</span>
+                        {#if b.contradicting_fact_ids.length > 0 || b.version > 1}
+                          <span class="pill pill-warning" style="font-size: 0.68rem;" title="{b.contradicting_fact_ids.length} contradiction(s) resolved">
+                            <Sparkles size={11} /> v{b.version} Resolved
+                          </span>
+                        {:else}
+                          <span class="pill pill-neutral" style="font-size: 0.68rem;">
+                            v{b.version} Verified
+                          </span>
+                        {/if}
+                      </div>
+
+                      <div class="dossier-belief-value">{b.value}</div>
+
+                      <div class="dossier-source-tag">
+                        <span class="seq-num-badge">#{info.sequenceNum < 9999 ? info.sequenceNum : '?'}</span>
+                        <span class="fact-tag origin" title="Origin Fact">Fact {info.originFactId}</span>
+                        {#if info.hasEvolution && info.allFactIds.length > 1}
+                          <span style="color: var(--text-muted); font-size: 0.65rem;">→</span>
+                          <span class="fact-tag latest" title="Latest updating fact">Fact {info.latestFactId} (Updated)</span>
+                        {/if}
+                      </div>
+
+                      <div class="dossier-footer">
+                        <div style="display: flex; align-items: center; gap: 0.45rem;">
+                          <span style="font-size: 0.76rem; font-weight: 600;">{(b.confidence * 100).toFixed(0)}%</span>
+                          <div class="confidence-track" style="width: 45px; height: 5px;">
+                            <div class="confidence-fill" style="width: {b.confidence * 100}%;"></div>
+                          </div>
+                        </div>
+
+                        <button
+                          class="btn btn-secondary"
+                          style="padding: 0.28rem 0.6rem; font-size: 0.72rem;"
+                          onclick={() => openProvenance(b.id)}
+                        >
+                          <History size={11} /> Provenance
+                        </button>
+                      </div>
+                    </div>
+                  {/each}
                 </div>
               </div>
             {/each}
           </div>
 
-        <!-- Mode 2: Flat Card Grid -->
+        <!-- Mode 2: Table View -->
+        {:else if repositoryDisplayMode === 'table'}
+          <div class="entity-dossier-table-wrapper" style="margin-top: 0.5rem; background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: var(--radius-lg);">
+            <table class="entity-dossier-table">
+              <thead>
+                <tr>
+                  <th style="width: 14%;">Entity</th>
+                  <th style="width: 18%;">Attribute</th>
+                  <th style="width: 32%;">Established Ground Truth</th>
+                  <th style="width: 12%;">Source / Seq</th>
+                  <th style="width: 10%;">Confidence</th>
+                  <th style="width: 8%;">Status</th>
+                  <th style="width: 6%; text-align: right;">Audit</th>
+                </tr>
+              </thead>
+              <tbody>
+                {#each visibleBeliefs as b}
+                  {@const info = getFactSequenceInfo(b)}
+                  <tr>
+                    <td>
+                      <strong style="color: var(--text-primary);">{b.entity}</strong>
+                    </td>
+                    <td>
+                      <span style="font-weight: 600; color: var(--text-secondary);">{b.attribute}</span>
+                    </td>
+                    <td>
+                      <span class="belief-value" style="display: inline-block; max-width: 100%;">
+                        {b.value}
+                      </span>
+                    </td>
+                    <td>
+                      <div style="display: flex; align-items: center; gap: 0.35rem; flex-wrap: wrap;">
+                        <span class="seq-num-badge">#{info.sequenceNum < 9999 ? info.sequenceNum : '?'}</span>
+                        <span class="fact-tag origin">{info.originFactId}</span>
+                        {#if info.hasEvolution && info.allFactIds.length > 1}
+                          <span style="color: var(--text-muted); font-size: 0.65rem;">→</span>
+                          <span class="fact-tag latest">{info.latestFactId}</span>
+                        {/if}
+                      </div>
+                    </td>
+                    <td>
+                      <div style="display: flex; align-items: center; gap: 0.5rem;">
+                        <span style="font-size: 0.78rem; font-weight: 600; min-width: 32px;">{(b.confidence * 100).toFixed(0)}%</span>
+                        <div class="confidence-track" style="width: 50px; height: 5px;">
+                          <div class="confidence-fill" style="width: {b.confidence * 100}%;"></div>
+                        </div>
+                      </div>
+                    </td>
+                    <td>
+                      {#if b.contradicting_fact_ids.length > 0 || b.version > 1}
+                        <span class="pill pill-warning" style="font-size: 0.68rem;">
+                          ⚡ v{b.version} Resolved
+                        </span>
+                      {:else}
+                        <span class="pill pill-neutral" style="font-size: 0.68rem;">
+                          v{b.version} Clean
+                        </span>
+                      {/if}
+                    </td>
+                    <td style="text-align: right;">
+                      <button
+                        class="btn btn-secondary"
+                        style="padding: 0.3rem 0.65rem; font-size: 0.75rem;"
+                        onclick={() => openProvenance(b.id)}
+                      >
+                        <History size={12} />
+                      </button>
+                    </td>
+                  </tr>
+                {/each}
+              </tbody>
+            </table>
+          </div>
+
+        <!-- Mode 3: Flat Card Grid -->
         {:else}
           <div class="beliefs-grid" style="margin-top: 0.5rem;">
             {#each visibleBeliefs as b}
