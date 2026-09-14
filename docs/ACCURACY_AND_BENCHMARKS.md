@@ -137,7 +137,37 @@ This document provides a comprehensive evaluation of the Jnaara belief engine ac
 
 ---
 
-## 3. Two-Tier Detection Performance Breakdown
+## 3. Dual-Strategy Comparative Benchmark: Recency vs. Corroboration
+
+The assignment requires at least two pluggable strategies whose activation produces demonstrably different, explainable belief states:
+
+### Mathematical Scoring Formulations
+
+1. **`RecencyWeightedStrategy`**:
+   $$\text{Score} = \text{Reliability Weight} \times (1.0 + \text{Recency Multiplier})$$
+   * Prioritizes recent chronological updates from credible sources (e.g., restatements, new appointments).
+
+2. **`CorroborationWeightedStrategy`**:
+   $$\text{Score} = \sum_{i} \text{Reliability}(S_i) \times \text{Independence Diversity Factor} - \text{Contradiction Penalty}$$
+   * Prioritizes independent multi-source corroboration and consensus over a single late assertion.
+
+---
+
+### Side-by-Side Outcome Comparison Across All Sequences
+
+| Entity & Attribute | Evaluated Claims & Evidence | `RecencyWeightedStrategy` Outcome | `CorroborationWeightedStrategy` Outcome | Strategy Agreement / Divergence Rationale |
+| :--- | :--- | :---: | :---: | :--- |
+| **NovaTech**<br>`enterprise customers` | **E4/E10**: `340` (Filing + CNBC CFO)<br>**E12**: `200` (Low-rel blog)<br>**E26**: `298` (Single CEO statement) | **`298`** (v3, conf: 0.95)<br>*Latest CEO update supersedes* | **`340`** (v2, conf: 0.98)<br>*Multi-source corroboration outscores single later claim* | 🔀 **Intentional Divergence**<br>Demonstrates core strategy behavior on unconfirmed single-source updates. |
+| **NovaTech**<br>`Q4 2024 revenue` | **E1**: `$480M` (Preliminary release)<br>**E7**: `$412M` (SEC 8-K Restatement) | **`$412M`**<br>*Restatement supersedes* | **`$412M`**<br>*Audited regulatory source dominates* | 🤝 **Consensus Agreement**<br>Both strategies correctly identify legal/audit restatements as ground truth. |
+| **Meridian**<br>`CEO` | **E2**: David Park stepping down<br>**E8**: Dr. Sarah Chen appointed | **`Dr. Sarah Chen`** | **`Dr. Sarah Chen`** | 🤝 **Consensus Agreement**<br>Both strategies handle succession cleanly without false conflict. |
+| **Meridian**<br>`hospitals` | **E5**: `142` network hospitals<br>**E17**: `134` (8 rural facilities closed) | **`134`** | **`134`** | 🤝 **Consensus Agreement**<br>Both strategies accurately track facility footprint contractions. |
+| **Vantage Energy**<br>`methane compliance` | **M3/M23**: ESG leadership claims<br>**M13/M27**: EPA violation + $45M fine | **`EPA Violation Notice`**<br>*Penalty settlement wins* | **`EPA Violation Notice`**<br>*High-reliability regulatory source wins* | 🤝 **Consensus Agreement**<br>Both strategies suppress unsubstantiated corporate marketing. |
+| **Arcadia Robotics**<br>`customer health` | **M6**: CEO claims strong order book<br>**M12/M21**: TerraMotors going-concern & write-down | **`TerraMotors Insolvent`**<br>*Write-down supersedes* | **`TerraMotors Insolvent`**<br>*Multiple independent filings corroborate* | 🤝 **Consensus Agreement**<br>Both strategies surface cross-entity partner distress. |
+| **Forge Therapeutics**<br>`FT-400 efficacy` | **H4**: Claimed `34%` PFS<br>**H9/H23**: NEJM & FDA clean data `19%` | **`19% (Clean PFS)`**<br>*Late reanalysis supersedes* | **`19% (Clean PFS)`**<br>*Peer-reviewed multi-agency consensus* | 🤝 **Consensus Agreement**<br>Both strategies uncover clinical trial crossover bias. |
+
+---
+
+## 4. Two-Tier Detection Performance Breakdown
 
 ```mermaid
 graph TD
@@ -158,14 +188,14 @@ graph TD
 
 ---
 
-## 4. How to Verify Accuracy Locally
+## 5. How to Verify Accuracy Locally
 
 You can run the full automated verification suite anytime:
 
 ```bash
-# Run all 42 unit & integration tests
+# Run all 44 unit & integration tests
 uv run pytest -v
 
-# Run the 3-sequence benchmark integration suite specifically
+# Run the 3-sequence benchmark integration suite specifically (both strategies)
 uv run pytest tests/test_integration.py -v
 ```

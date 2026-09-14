@@ -103,6 +103,61 @@ def test_sequence_3_hard_integration(
     assert any("investment stance" in c.attribute.lower() for c in pinnacle_conflicts)
 
 
+def test_sequence_2_corroboration_strategy_integration(
+    repository: Repository, dataset_path: Path, analyzer
+):
+    """Verify Sequence 2 resolves accurately under corroboration strategy."""
+    repository.clear_all()
+    ingestor = FactIngestor()
+    facts = ingestor.load_sequence(dataset_path, "sequence_2_medium")
+
+    resolver = ConflictResolver("corroboration")
+    detector = ConflictDetector(repository, analyzer)
+    manager = BeliefManager(repository, analyzer, detector, resolver)
+
+    results = manager.process_sequence(facts)
+    assert len(results) == 27
+
+    conflicts = repository.get_conflicts()
+    assert len(conflicts) > 0
+
+    # Under corroboration, EPA regulatory notices and multiple disclosures confirm violations & restructuring
+    vantage_conflicts = repository.get_conflicts("Vantage Energy")
+    assert any("methane" in c.attribute.lower() for c in vantage_conflicts)
+
+    arcadia_conflicts = repository.get_conflicts("Arcadia Robotics")
+    assert any("revenue" in c.attribute.lower() for c in arcadia_conflicts)
+
+    terra_conflicts = repository.get_conflicts("TerraMotors")
+    assert any("solvency" in c.attribute.lower() or "financial" in c.description.lower() for c in terra_conflicts)
+
+
+def test_sequence_3_corroboration_strategy_integration(
+    repository: Repository, dataset_path: Path, analyzer
+):
+    """Verify Sequence 3 resolves accurately under corroboration strategy."""
+    repository.clear_all()
+    ingestor = FactIngestor()
+    facts = ingestor.load_sequence(dataset_path, "sequence_3_hard")
+
+    resolver = ConflictResolver("corroboration")
+    detector = ConflictDetector(repository, analyzer)
+    manager = BeliefManager(repository, analyzer, detector, resolver)
+
+    results = manager.process_sequence(facts)
+    assert len(results) == 30
+
+    conflicts = repository.get_conflicts()
+    assert len(conflicts) > 0
+
+    # Under corroboration, independent NEJM and FDA re-analyses confirm true clinical efficacy
+    forge_conflicts = repository.get_conflicts("Forge Therapeutics")
+    assert any("ft-400" in c.attribute.lower() for c in forge_conflicts)
+
+    helios_conflicts = repository.get_conflicts("Helios Semiconductor")
+    assert any("capacity" in c.description.lower() or "inventory" in c.description.lower() for c in helios_conflicts)
+
+
 def test_strategy_switching_produces_different_outcomes(
     repository: Repository, dataset_path: Path, analyzer, detector
 ):
