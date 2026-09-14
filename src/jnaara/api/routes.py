@@ -1,11 +1,14 @@
 import json
 import logging
+import time
 from datetime import datetime
 from typing import Any, Literal
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile, status
 from sqlalchemy.orm import Session
+
+from jnaara.llm.mock import MockLLMProvider
 
 from jnaara.api.dependencies import get_belief_manager, get_conflict_resolver, get_db
 from jnaara.api.schemas import (
@@ -233,12 +236,18 @@ def submit_bulk_facts(
     # Sort facts by timestamp to ensure causal/chronological ordering
     facts_to_process.sort(key=lambda item: item.timestamp)
 
+    # Determine delay
+    settings = get_settings()
+    is_mock = isinstance(manager.analyzer.primary, MockLLMProvider)
+    delay_s = 0.0 if is_mock else settings.fact_delay_seconds
+
     results: list[FactProcessResponse] = []
     total_claims = 0
     total_conflicts = 0
     total_skipped = 0
+    total_facts = len(facts_to_process)
 
-    for fact in facts_to_process:
+    for idx, fact in enumerate(facts_to_process):
         res = manager.process_fact(fact)
         if res.skipped:
             total_skipped += 1
@@ -261,6 +270,15 @@ def submit_bulk_facts(
                 conflicts=conflicts_resp,
             )
         )
+
+        if delay_s > 0 and idx < total_facts - 1:
+            logger.info(
+                "[RateLimiter] Bulk API pacing: sleeping %.1fs before next fact (%d/%d)...",
+                delay_s,
+                idx + 2,
+                total_facts,
+            )
+            time.sleep(delay_s)
 
     logger.info(
         "[API] POST /api/facts/bulk completed: %d submitted, %d processed, %d skipped, %d claims, %d conflicts",
@@ -435,12 +453,18 @@ async def upload_facts_file(
     facts_to_process.sort(key=lambda item: item.timestamp)
     logger.info("[API] POST /api/facts/upload -> sorted and queued %d facts to process", len(facts_to_process))
 
+    # Determine delay
+    settings = get_settings()
+    is_mock = isinstance(manager.analyzer.primary, MockLLMProvider)
+    delay_s = 0.0 if is_mock else settings.fact_delay_seconds
+
     results: list[FactProcessResponse] = []
     total_claims = 0
     total_conflicts = 0
     total_skipped = 0
+    total_facts = len(facts_to_process)
 
-    for fact in facts_to_process:
+    for idx, fact in enumerate(facts_to_process):
         res = manager.process_fact(fact)
         if res.skipped:
             total_skipped += 1
@@ -463,6 +487,15 @@ async def upload_facts_file(
                 conflicts=conflicts_resp,
             )
         )
+
+        if delay_s > 0 and idx < total_facts - 1:
+            logger.info(
+                "[RateLimiter] File upload pacing: sleeping %.1fs before next fact (%d/%d)...",
+                delay_s,
+                idx + 2,
+                total_facts,
+            )
+            time.sleep(delay_s)
 
     logger.info(
         "[API] POST /api/facts/upload completed for '%s': %d facts processed, %d skipped, %d claims extracted, %d conflicts",

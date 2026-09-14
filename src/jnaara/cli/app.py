@@ -1,3 +1,4 @@
+import time
 from pathlib import Path
 from typing import Optional
 import typer
@@ -65,6 +66,7 @@ def ingest(
     dataset_path: Path = typer.Argument(Path("data/jnaara_memory_facts_dataset.json"), help="Path to facts dataset"),
     sequence: Optional[str] = typer.Option(None, "--sequence", "-s", help="Sequence name (e.g., sequence_1_easy)"),
     strategy: Optional[str] = typer.Option(None, "--strategy", help="Resolution strategy (recency or corroboration)"),
+    delay: Optional[float] = typer.Option(None, "--delay", "-d", help="Delay in seconds between facts to respect LLM rate limits"),
 ):
     """Ingest facts from dataset, extract claims, detect conflicts, and update beliefs."""
     settings = get_settings()
@@ -79,6 +81,10 @@ def ingest(
             all_seqs = ingestor.load_dataset(dataset_path)
             sequences_to_run = list(all_seqs.items())
 
+        # Determine effective delay
+        is_mock = isinstance(manager.analyzer.primary, MockLLMProvider)
+        effective_delay = 0.0 if is_mock else (delay if delay is not None else settings.fact_delay_seconds)
+
         total_processed = 0
         total_skipped = 0
         total_conflicts = 0
@@ -86,8 +92,8 @@ def ingest(
         recorded_results = []
 
         for seq_name, facts in sequences_to_run:
-            console.print(f"\n[bold cyan]Processing {seq_name} ({len(facts)} facts) with strategy '{resolver.active_strategy}'...[/bold cyan]")
-            for f in facts:
+            console.print(f"\n[bold cyan]Processing {seq_name} ({len(facts)} facts) with strategy '{resolver.active_strategy}' (delay: {effective_delay:.1f}s)...[/bold cyan]")
+            for idx, f in enumerate(facts):
                 res = manager.process_fact(f)
                 conflicts_in_fact = sum(1 for _, c in res.results if c is not None)
                 recorded_results.append({
@@ -108,6 +114,10 @@ def ingest(
                     total_conflicts += conflicts_in_fact
                     status_badge = f"[yellow]{conflicts_in_fact} conflict(s)[/yellow]" if conflicts_in_fact else "[green]OK[/green]"
                     console.print(f"  Fact [bold]{f.id}[/bold]: {status_badge} ({len(res.claims)} claims extracted)")
+
+                # Sleep between facts to comply with LLM rate limits
+                if effective_delay > 0 and idx < len(facts) - 1:
+                    time.sleep(effective_delay)
 
         console.print(f"\n[bold green][OK] Ingestion Complete![/bold green] Processed: {total_processed}, Skipped: {total_skipped}, Conflicts: {total_conflicts}")
 

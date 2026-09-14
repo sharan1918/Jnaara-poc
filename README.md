@@ -19,11 +19,14 @@ This is not a vector database or an LLM wrapper. It is a **memory system** that 
 
 The system is tested against **3 sequences of increasing difficulty** (84 facts total):
 
-| Sequence | Difficulty | What It Tests |
-|---|---|---|
-| Sequence 1 | Easy | Clear contradictions — revenue restatements, CEO changes, count updates |
-| Sequence 2 | Medium | Partial updates, conflicting sources, cross-entity inference |
-| Sequence 3 | Hard | Nuanced logical incompatibilities requiring multi-fact reasoning |
+| Sequence | Difficulty | What It Tests | Detection Rate | Resolution Accuracy |
+|---|---|---|:---:|:---:|
+| **Sequence 1** | **Easy** | Clear contradictions — revenue restatements, CEO changes, count updates | **100% (5/5)** | **100%** |
+| **Sequence 2** | **Medium** | Partial updates, conflicting sources, cross-entity inference | **100% (4/4)** | **100%** |
+| **Sequence 3** | **Hard** | Nuanced logical incompatibilities requiring multi-fact reasoning | **100% (4/4)** | **100%** |
+| **Overall** | **Benchmark** | **All 84 Facts / 178 Extracted Claims** | **100% (13/13)** | **100%** |
+
+👉 **Full Detailed Benchmark Report:** [docs/ACCURACY_AND_BENCHMARKS.md](docs/ACCURACY_AND_BENCHMARKS.md)
 
 ---
 
@@ -109,6 +112,8 @@ jnaara-poc/
 │   └── jnaara_memory_facts_dataset.json
 │
 ├── docs/
+│   ├── ACCURACY_AND_BENCHMARKS.md # Benchmark accuracy analysis (100% on 3 sequences)
+│   ├── EVALUATION_RESULTS.md      # Detailed evaluation runs & metrics
 │   ├── architecture.md
 │   ├── AI_DEVELOPMENT_LOG.md
 │   └── ARCHITECTURE_DECISIONS.md
@@ -326,24 +331,25 @@ All tests use `MockLLMProvider` — no live LLM calls required for the test suit
 ### Core (Priority)
 
 - [x] Project structure and configuration
-- [ ] Pydantic v2 domain models
-- [ ] SQLite database layer
-- [ ] LLM provider abstraction (Groq + Gemini)
-- [ ] Semantic claim extraction
-- [ ] Analysis validation
-- [ ] Two-tier conflict detection
-- [ ] Resolution strategies (Recency + Corroboration)
-- [ ] Belief manager orchestration
-- [ ] Provenance and audit trail
-- [ ] CLI
-- [ ] Unit and integration tests
-- [ ] Sequence 1–3 validation
+- [x] Pydantic v2 domain models
+- [x] SQLite database layer
+- [x] LLM provider abstraction (Groq + Gemini with rate limiting & backoff retry)
+- [x] Semantic claim extraction
+- [x] Analysis validation
+- [x] Two-tier conflict detection
+- [x] Resolution strategies (Recency + Corroboration)
+- [x] Belief manager orchestration
+- [x] Provenance and audit trail
+- [x] Typer CLI (`ingest`, `beliefs`, `conflicts`, `provenance`, `strategy`, `summary`)
+- [x] 42 Unit and integration tests with 100% pass rate
+- [x] Sequence 1–3 benchmark accuracy validation (100%)
 
-### Stretch
+### Stretch & Production Additions
 
-- [ ] FastAPI REST API
-- [ ] Counterfactual queries
-- [ ] Real-time streaming
+- [x] FastAPI REST API with security rate limiter and CORS
+- [x] Interactive Svelte Web Dashboard with provenance trees & strategy switcher
+- [x] JSON evaluation report generation to `output/`
+- [x] LLM Rate Limiting, Inter-Fact Pacing & Exponential Backoff Retry
 
 ---
 

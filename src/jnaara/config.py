@@ -17,6 +17,14 @@ class Settings(BaseSettings):
     secondary_llm: Literal["groq", "gemini", "mock"] = "gemini"
     secondary_model: str = "gemini-3.6-flash"
 
+    # LLM Rate Limiting & Pacing Configuration
+    fact_delay_seconds: float = 2.0
+    groq_min_call_interval: float = 2.0
+    gemini_min_call_interval: float = 4.0
+    llm_max_retries: int = 5
+    llm_retry_initial_delay: float = 3.0
+    llm_retry_backoff_factor: float = 2.0
+
     # Application Persistence & Strategy
     db_path: Path = Path("data/jnaara.db")
     output_dir: Path = Path("output")

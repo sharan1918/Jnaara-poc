@@ -1,3 +1,4 @@
+import time
 from datetime import datetime, timezone
 import hashlib
 import logging
@@ -119,10 +120,28 @@ class BeliefManager:
             results=step_results,
         )
 
-    def process_sequence(self, facts: list[Fact]) -> list[ProcessingResult]:
-        """Process an entire sequence of facts in chronological order."""
+    def process_sequence(
+        self, facts: list[Fact], delay_seconds: float = 0.0
+    ) -> list[ProcessingResult]:
+        """Process an entire sequence of facts in chronological order with optional inter-fact delay."""
         sorted_facts = sorted(facts, key=lambda f: f.timestamp)
-        return [self.process_fact(f) for f in sorted_facts]
+        results: list[ProcessingResult] = []
+        total = len(sorted_facts)
+
+        for idx, f in enumerate(sorted_facts):
+            res = self.process_fact(f)
+            results.append(res)
+            # Apply delay between facts (except after the final fact) to respect LLM rate limits
+            if delay_seconds > 0 and idx < total - 1:
+                logger.info(
+                    "[RateLimiter] Ingestion pacing: sleeping %.1fs before next fact (%d/%d)...",
+                    delay_seconds,
+                    idx + 2,
+                    total,
+                )
+                time.sleep(delay_seconds)
+
+        return results
 
     def _handle_new_belief(self, claim: Claim, fact: Fact, decision: Decision) -> None:
         belief = Belief(

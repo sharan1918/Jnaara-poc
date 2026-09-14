@@ -72,3 +72,5 @@ jnaara_takehome.docx
 # Evaluation outputs
 output/*.json
 !output/.gitkeep
+web/output/
+web/data/
