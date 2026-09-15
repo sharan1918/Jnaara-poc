@@ -56,8 +56,7 @@ htmlcov/
 *~
 .DS_Store
 
-# Local notes & prompts
-docs/prompts.md
+# Local notes
 
 # Frontend / Node
 node_modules/
