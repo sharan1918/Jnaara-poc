@@ -34,36 +34,69 @@ The system is tested against **5 sequences of increasing difficulty** (138 facts
 
 ## Architecture
 
-```
-Raw Fact (JSON)
-   ↓
-Fact Ingestor                       ← Parse, validate (Pydantic), persist
-   ↓
-LLM Semantic Analysis               ← GPT-OSS 120B via Groq (primary)
-   ↓                                   Gemini on failure or second opinion
-Structured FactAnalysis
-   ↓
-Analysis Validator                  ← Validates LLM output before business logic
-   ↓
-Candidate Belief Retrieval          ← SQLite query by entity
-   ↓
-Tier 1: Deterministic Detection     ← Direct conflicts, temporal updates
-   │
-   ├── Can decide → Decision
-   │
-   └── Cannot decide
-            ↓
-     Tier 2: LLM Inference          ← Semantic/cross-entity reasoning
-            ↓
-         Decision
-            ↓
-Conflict Resolution Strategy        ← Deterministic, never calls LLM
-   ├── RecencyWeightedStrategy
-   └── CorroborationWeightedStrategy
-            ↓
-Belief Manager                      ← Applies decision to state
-            ↓
-SQLite (Beliefs, Decisions, Conflicts, Provenance)
+```mermaid
+flowchart TD
+    %% Styling Classes matching pastel boxed reference
+    classDef rootBox fill:#ff99f7,stroke:#18181b,stroke-width:3px,color:#18181b,font-weight:bold,rx:8px,ry:8px;
+    classDef lavenderBox fill:#ede9fe,stroke:#7c3aed,stroke-width:1.5px,color:#1e1b4b,font-weight:500,rx:8px,ry:8px;
+    classDef blueBox fill:#dbeafe,stroke:#2563eb,stroke-width:1.5px,color:#1e3a8a,font-weight:500,rx:8px,ry:8px;
+    classDef amberBox fill:#fef3c7,stroke:#d97706,stroke-width:1.5px,color:#78350f,font-weight:500,rx:8px,ry:8px;
+    classDef greenBox fill:#d1fae5,stroke:#059669,stroke-width:1.5px,color:#064e3b,font-weight:500,rx:8px,ry:8px;
+    classDef redBox fill:#fee2e2,stroke:#dc2626,stroke-width:1.5px,color:#7f1d1d,font-weight:500,rx:8px,ry:8px;
+    classDef purpleBox fill:#fae8ff,stroke:#a21caf,stroke-width:1.5px,color:#701a75,font-weight:500,rx:8px,ry:8px;
+    classDef cyanBox fill:#e0f2fe,stroke:#0284c7,stroke-width:1.5px,color:#0c4a6e,font-weight:500,rx:8px,ry:8px;
+    classDef highlightBox fill:#c7d2fe,stroke:#1e1b4b,stroke-width:2.5px,color:#0f172a,font-weight:bold,rx:8px,ry:8px;
+
+    ROOT["[ 1. INCOMING FACT STREAM ]<br/><b>Sequential Enterprise Facts</b><br/><i>(Source, Reliability, Timestamp)</i>"]:::rootBox
+    UI["[ 2. INTERFACE &amp; GATEWAY ]<br/>Svelte 5 Dashboard / Typer CLI / FastAPI Backend"]:::lavenderBox
+    
+    LLM_EXTRACT["[ 3. SEMANTIC EXTRACTION ]<br/><b>LangChain Provider Boundary</b><br/>Groq 120B / Gemini 3.6 / MockLLM"]:::blueBox
+    VALIDATOR["[ 4. ANALYSIS VALIDATOR ]<br/><b>Anti-Hallucination Firewall</b><br/>Pydantic Schema &amp; Confidence Guard"]:::amberBox
+    
+    RETRIEVAL["[ 5. CANDIDATE LOOKUP ]<br/>SQLite Entity &amp; Property State Query"]:::cyanBox
+    
+    TIER1["[ 6. TIER 1: DETERMINISTIC FAST-PATH ]<br/><b>Pure Python Numeric &amp; Temporal Engine</b><br/>$0 Token Cost / ~1ms (e.g. $480M &ne; $412M)"]:::greenBox
+    TIER2["[ 7. TIER 2: SEMANTIC INFERENCE ]<br/><b>LLM Reasoning on Complex Logic</b><br/>Cross-Entity Distress &amp; Hidden Contradictions"]:::blueBox
+    
+    NEW_B["[ NEW BELIEF ]<br/>First-Time Entity Property Initialized"]:::greenBox
+    UPDATE_B["[ TEMPORAL UPDATE ]<br/>Direct Supersession of Prior Version"]:::purpleBox
+    CONFLICT_FLOW["[ CONFLICT DETECTED ]<br/>Contradiction Triggered Between Claims"]:::amberBox
+    DISCARD["[ DISCARD NOISE ]<br/>Low Confidence or Irrelevant Claim"]:::redBox
+    
+    STRATEGY["[ 8. RESOLUTION STRATEGY ]<br/><b>Pluggable Deterministic Engine</b><br/>Recency vs Corroboration"]:::highlightBox
+    
+    RECENCY["[ RECENCY STRATEGY ]<br/>Reliability &times; Timestamp Decay<br/><i>(Latest Verified Source Wins)</i>"]:::cyanBox
+    CORROB["[ CORROBORATION STRATEGY ]<br/>Independent Group Consensus<br/><i>(Multi-Source Agreement Wins)</i>"]:::cyanBox
+    
+    MANAGER["[ 9. BELIEF MANAGER ]<br/><b>State Transition Engine</b><br/>Applies Decisions, Calculates Confidence &amp; Logs Audit Trail"]:::highlightBox
+    MEMORY["[ 10. SYSTEM PERSISTENCE &amp; PROVENANCE ]<br/><b>SQLite Database + Provenance Graph</b><br/>Facts &rarr; Claims &rarr; Decisions &rarr; Conflicts &rarr; Versioned Beliefs"]:::cyanBox
+
+    ROOT --> UI
+    UI --> LLM_EXTRACT
+    LLM_EXTRACT --> VALIDATOR
+    VALIDATOR --> RETRIEVAL
+    RETRIEVAL --> TIER1
+
+    TIER1 -->|"Direct Match (New Fact)"| NEW_B
+    TIER1 -->|"Temporal Supersession"| UPDATE_B
+    TIER1 -->|"Direct Numeric Mismatch"| CONFLICT_FLOW
+    TIER1 -->|"Low Confidence / Junk"| DISCARD
+    TIER1 -->|"Nuanced / Relational Inference Required"| TIER2
+
+    TIER2 -->|"No Conflict Inferred"| NEW_B
+    TIER2 -->|"Semantic Contradiction Inferred"| CONFLICT_FLOW
+    TIER2 -->|"Ambiguous / Below Threshold"| DISCARD
+
+    CONFLICT_FLOW --> STRATEGY
+    STRATEGY --> RECENCY
+    STRATEGY --> CORROB
+    RECENCY --> MANAGER
+    CORROB --> MANAGER
+    NEW_B --> MANAGER
+    UPDATE_B --> MANAGER
+    DISCARD --> MANAGER
+
+    MANAGER --> MEMORY
 ```
 
 ### Core Architectural Principle
