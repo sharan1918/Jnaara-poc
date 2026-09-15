@@ -91,8 +91,8 @@ The LLM never modifies beliefs or writes to the database directly.
 | Language | Python 3.12+ | Strong backend ecosystem |
 | Data validation | Pydantic v2 | Typed Fact, Belief, Conflict, Decision models |
 | LLM abstraction | LangChain | Common interface for Groq + Gemini |
-| LLM (primary) | Groq (GPT-OSS 120B) | Fast inference, reasoning-capable |
-| LLM (secondary) | Google Gemini | Independent provider for fallback/second opinion |
+| LLM (primary) | Groq (`openai/gpt-oss-120b`) | Fast inference, reasoning-capable |
+| LLM (secondary) | Google Gemini (`gemini-3.6-flash`) | Independent provider for fallback/second opinion |
 | Conflict resolution | Strategy Pattern | Pluggable, deterministic, auditable |
 | Database | SQLite + SQLAlchemy | Persistent beliefs, facts, conflicts, provenance |
 | CLI | Typer + Rich | Interactive commands with formatted output |
@@ -163,51 +163,87 @@ jnaara-poc/
 
 ---
 
-## Setup
+## Setup & Installation
 
 ### Prerequisites
 
-- Python 3.12+
-- [uv](https://docs.astral.sh/uv/) package manager
-- Groq API key
-- Google Gemini API key
+- **Python 3.12+** and [**uv**](https://docs.astral.sh/uv/) package manager
+- **Node.js 18+** and **npm** (for the web frontend)
+- *Optional:* Groq / Google Gemini API keys for live LLM inference (the system includes deterministic mock providers for offline development and test execution)
 
-### Installation
+### 1. Backend Setup
 
 ```bash
 # Clone the repository
 git clone https://github.com/sharan1918/Jnaara-poc.git
 cd Jnaara-poc
 
-# Install dependencies
+# Install Python backend dependencies
 uv sync
 
-# Configure environment
+# Configure environment variables
 cp .env.example .env
-# Edit .env with your API keys and model preferences
+# Edit .env with your API keys and model preferences (optional for mock mode)
 ```
 
-### Configuration
+#### Running the Backend API Server
+
+Start the FastAPI REST backend server:
+
+```bash
+# From the project root:
+uv run uvicorn jnaara.api.main:app --reload --port 8000
+```
+
+- **Backend API URL:** `http://localhost:8000`
+- **Interactive OpenAPI / Swagger Docs:** `http://localhost:8000/docs`
+- **Health Check Endpoint:** `http://localhost:8000/health`
+
+---
+
+### 2. Frontend (Web UI) Setup
+
+The web dashboard is an interactive visual interface with real-time sequence ingestion, step-by-step belief timeline player, provenance graph visualization, and strategy switching.
+
+```bash
+# Navigate to the web frontend directory
+cd web
+
+# Install Node.js frontend dependencies
+npm install
+
+# Start the Vite development server
+npm run dev
+```
+
+- **Web Dashboard URL:** `http://localhost:5173` (or the port displayed in your terminal)
+- **Production Build:** `npm run build`
+
+---
+
+### 3. Configuration (.env)
 
 ```env
 JNAARA_GROQ_API_KEY=gsk_...
 JNAARA_GOOGLE_API_KEY=AIza...
 JNAARA_PRIMARY_LLM=groq
-JNAARA_PRIMARY_MODEL=<your-groq-model>
+JNAARA_PRIMARY_MODEL=openai/gpt-oss-120b
 JNAARA_SECONDARY_LLM=gemini
-JNAARA_SECONDARY_MODEL=<your-gemini-model>
+JNAARA_SECONDARY_MODEL=gemini-3.6-flash
 JNAARA_DB_PATH=data/jnaara.db
 JNAARA_DEFAULT_STRATEGY=recency
 ```
 
 ---
 
-## Usage
+## CLI Usage
+
+You can also interact with the belief engine directly via the Typer CLI:
 
 ### Ingest Facts
 
 ```bash
-# Ingest a specific sequence
+# Ingest a specific sequence (e.g. sequence 1, 2, 3, 4, or 5)
 jnaara ingest data/jnaara_memory_facts_dataset.json --sequence sequence_1_easy
 
 # Ingest all sequences
