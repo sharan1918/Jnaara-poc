@@ -103,6 +103,64 @@ def test_sequence_3_hard_integration(
     assert any("investment stance" in c.attribute.lower() for c in pinnacle_conflicts)
 
 
+def test_sequence_4_hard_integration(
+    manager: BeliefManager, repository: Repository, dataset_path: Path
+):
+    """Verify Sequence 4 (FinTech / Cross-Entity Liquidity Contradictions) integration."""
+    ingestor = FactIngestor()
+    facts = ingestor.load_sequence(dataset_path, "sequence_4_hard")
+    assert len(facts) == 27
+
+    results = manager.process_sequence(facts)
+    assert len(results) == 27
+
+    all_conflicts = repository.get_conflicts()
+    assert len(all_conflicts) > 0
+
+    # 1. Reserve backing vs Commercial real estate loan mismatch
+    aether_conflicts = repository.get_conflicts("AetherPay Systems")
+    solas_conflicts = repository.get_conflicts("Solas Digital Asset Bank")
+    nordic_conflicts = repository.get_conflicts("Nordic Express Logistics")
+    valence_conflicts = repository.get_conflicts("Valence Capital Partners")
+
+    assert any("reserve" in c.attribute.lower() or "reserve" in c.description.lower() for c in (aether_conflicts + solas_conflicts))
+
+    # 2. Instant settlement guarantee vs frozen receivables & court injunction
+    assert any("settlement" in c.attribute.lower() for c in (aether_conflicts + nordic_conflicts))
+
+    # 3. Valence credit facility risk & impairment status
+    assert any("credit facility" in c.attribute.lower() or "impair" in c.description.lower() for c in valence_conflicts)
+
+
+def test_sequence_5_hard_integration(
+    manager: BeliefManager, repository: Repository, dataset_path: Path
+):
+    """Verify Sequence 5 (Cybersecurity Breach / Cloud SLA / Governance Contradictions) integration."""
+    ingestor = FactIngestor()
+    facts = ingestor.load_sequence(dataset_path, "sequence_5_hard")
+    assert len(facts) == 27
+
+    results = manager.process_sequence(facts)
+    assert len(results) == 27
+
+    all_conflicts = repository.get_conflicts()
+    assert len(all_conflicts) > 0
+
+    cipher_conflicts = repository.get_conflicts("CipherGuard AI")
+    sentient_conflicts = repository.get_conflicts("Sentient BioTech")
+    aegis_conflicts = repository.get_conflicts("Aegis Assurance Labs")
+    omni_conflicts = repository.get_conflicts("OmniCloud Infrastructure")
+
+    # 1. Zero compromise claims vs Sentient exfiltration & kernel driver bypass
+    assert any("cve-2025-9981" in c.attribute.lower() or "breach" in c.attribute.lower() for c in (cipher_conflicts + sentient_conflicts + aegis_conflicts))
+
+    # 2. OmniCloud five-nines uptime vs 14.8h downtime & penalty credits
+    assert any("availability" in c.attribute.lower() or "sla" in c.attribute.lower() for c in omni_conflicts)
+
+    # 3. In-region data residency vs NeurIPS paper 180TB customer telemetry training
+    assert any("residency" in c.attribute.lower() or "training" in c.attribute.lower() for c in cipher_conflicts)
+
+
 def test_sequence_2_corroboration_strategy_integration(
     repository: Repository, dataset_path: Path, analyzer
 ):
@@ -156,6 +214,53 @@ def test_sequence_3_corroboration_strategy_integration(
 
     helios_conflicts = repository.get_conflicts("Helios Semiconductor")
     assert any("capacity" in c.description.lower() or "inventory" in c.description.lower() for c in helios_conflicts)
+
+
+def test_sequence_4_corroboration_strategy_integration(
+    repository: Repository, dataset_path: Path, analyzer
+):
+    """Verify Sequence 4 resolves accurately under corroboration strategy."""
+    repository.clear_all()
+    ingestor = FactIngestor()
+    facts = ingestor.load_sequence(dataset_path, "sequence_4_hard")
+
+    resolver = ConflictResolver("corroboration")
+    detector = ConflictDetector(repository, analyzer)
+    manager = BeliefManager(repository, analyzer, detector, resolver)
+
+    results = manager.process_sequence(facts)
+    assert len(results) == 27
+
+    conflicts = repository.get_conflicts()
+    assert len(conflicts) > 0
+
+    aether_conflicts = repository.get_conflicts("AetherPay Systems")
+    solas_conflicts = repository.get_conflicts("Solas Digital Asset Bank")
+    assert any("reserve" in c.attribute.lower() or "reserve" in c.description.lower() for c in (aether_conflicts + solas_conflicts))
+
+
+def test_sequence_5_corroboration_strategy_integration(
+    repository: Repository, dataset_path: Path, analyzer
+):
+    """Verify Sequence 5 resolves accurately under corroboration strategy."""
+    repository.clear_all()
+    ingestor = FactIngestor()
+    facts = ingestor.load_sequence(dataset_path, "sequence_5_hard")
+
+    resolver = ConflictResolver("corroboration")
+    detector = ConflictDetector(repository, analyzer)
+    manager = BeliefManager(repository, analyzer, detector, resolver)
+
+    results = manager.process_sequence(facts)
+    assert len(results) == 27
+
+    conflicts = repository.get_conflicts()
+    assert len(conflicts) > 0
+
+    cipher_conflicts = repository.get_conflicts("CipherGuard AI")
+    sentient_conflicts = repository.get_conflicts("Sentient BioTech")
+    aegis_conflicts = repository.get_conflicts("Aegis Assurance Labs")
+    assert any("cve-2025-9981" in c.attribute.lower() or "breach" in c.attribute.lower() for c in (cipher_conflicts + sentient_conflicts + aegis_conflicts))
 
 
 def test_strategy_switching_produces_different_outcomes(

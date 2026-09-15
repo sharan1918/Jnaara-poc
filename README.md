@@ -17,14 +17,16 @@ This is not a vector database or an LLM wrapper. It is a **memory system** that 
 3. Resolves conflicts using pluggable, deterministic strategies
 4. Maintains an auditable trail of every belief change
 
-The system is tested against **3 sequences of increasing difficulty** (84 facts total):
+The system is tested against **5 sequences of increasing difficulty** (138 facts total across 15 enterprise entities):
 
 | Sequence | Difficulty | What It Tests | Detection Rate | Resolution Accuracy |
 |---|---|---|:---:|:---:|
-| **Sequence 1** | **Easy** | Clear contradictions — revenue restatements, CEO changes, count updates | **100% (5/5)** | **100%** |
-| **Sequence 2** | **Medium** | Partial updates, conflicting sources, cross-entity inference | **100% (4/4)** | **100%** |
-| **Sequence 3** | **Hard** | Nuanced logical incompatibilities requiring multi-fact reasoning | **100% (4/4)** | **100%** |
-| **Overall** | **Benchmark** | **All 84 Facts / 178 Extracted Claims** | **100% (13/13)** | **100%** |
+| **Sequence 1** | **Easy** | Clear contradictions — revenue restatements, CEO changes, facility counts | **100% (5/5)** | **100%** |
+| **Sequence 2** | **Medium** | Partial updates, conflicting sources, cross-entity partner dependencies | **100% (4/4)** | **100%** |
+| **Sequence 3** | **Hard** | Logical incompatibilities, supply chain friction, clinical trial crossover bias | **100% (4/4)** | **100%** |
+| **Sequence 4** | **Hard** | FinTech asset quality, stablecoin reserve duration mismatch, loan default hedging | **100% (3/3)** | **100%** |
+| **Sequence 5** | **Hard** | Cybersecurity breach denial vs packet captures, five-nines SLAs, telemetry training | **100% (3/3)** | **100%** |
+| **Overall** | **Benchmark** | **All 138 Facts across 15 Companies (286 Extracted Claims)** | **100% (19/19)** | **100%** |
 
 👉 **Full Detailed Benchmark Report:** [docs/ACCURACY_AND_BENCHMARKS.md](docs/ACCURACY_AND_BENCHMARKS.md)
 

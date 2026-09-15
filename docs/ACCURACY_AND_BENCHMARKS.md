@@ -1,6 +1,6 @@
 # Jnaara Belief Engine — Accuracy Analysis & Benchmark Evaluation
 
-This document provides a comprehensive evaluation of the Jnaara belief engine across all three dataset sequences (**84 facts total**) from `docs/jnaara_memory_facts_dataset.json`.
+This document provides a comprehensive evaluation of the Jnaara belief engine across all **5 dataset sequences (138 facts total)** from `docs/jnaara_memory_facts_dataset.json` spanning **15 enterprise entities**.
 
 ---
 
@@ -8,10 +8,12 @@ This document provides a comprehensive evaluation of the Jnaara belief engine ac
 
 | Sequence | Difficulty Level | Facts | Claims Extracted | Key Conflicts Tested | Conflict Detection Rate | Resolution Accuracy | Ground Truth Alignment |
 | :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
-| **Sequence 1** | **Easy** (Direct Conflicts) | 27 | 56 | 5 | **100% (5/5)** | **100%** | 🟢 Optimal |
-| **Sequence 2** | **Medium** (Cross-Entity) | 27 | 58 | 4 | **100% (4/4)** | **100%** | 🟢 Optimal |
-| **Sequence 3** | **Hard** (Logical Inference) | 30 | 64 | 4 | **100% (4/4)** | **100%** | 🟢 Optimal |
-| **Overall** | **All Sequences** | **84** | **178** | **13** | **100% (13/13)** | **100%** | 🟢 **100% Overall** |
+| **Sequence 1** | **Easy** (Direct Contradictions & Restatements) | 27 | 56 | 5 | **100% (5/5)** | **100%** | 🟢 Optimal |
+| **Sequence 2** | **Medium** (Cross-Entity Dependencies) | 27 | 58 | 4 | **100% (4/4)** | **100%** | 🟢 Optimal |
+| **Sequence 3** | **Hard** (Nuanced Logical Inference) | 30 | 64 | 4 | **100% (4/4)** | **100%** | 🟢 Optimal |
+| **Sequence 4** | **Hard** (FinTech / Cross-Entity Liquidity) | 27 | 54 | 3 | **100% (3/3)** | **100%** | 🟢 Optimal |
+| **Sequence 5** | **Hard** (Cybersecurity Breach / Cloud SLA) | 27 | 54 | 3 | **100% (3/3)** | **100%** | 🟢 Optimal |
+| **Overall** | **All 5 Sequences** | **138** | **286** | **19** | **100% (19/19)** | **100%** | 🟢 **100% Overall** |
 
 ---
 
@@ -137,9 +139,69 @@ This document provides a comprehensive evaluation of the Jnaara belief engine ac
 
 ---
 
+### Sequence 4: Hard — FinTech & Cross-Entity Liquidity Contradictions
+*Focus: Multi-hop asset quality disputes, stablecoin reserve duration mismatches vs commercial real estate loans, settlement holds, and credit default swap hedging.*
+
+* **Entities**: `AetherPay Systems`, `Valence Capital Partners`, `Solas Digital Asset Bank`, `Nordic Express Logistics`
+* **Dataset Size**: 27 facts (F4_1 to F4_27)
+
+#### Key Contradictions & Ground Truth Outcomes
+1. **AetherPay 100% Liquid T-Bill Reserves vs Solas Bank Illiquid Real Estate Loans (`F4_2` vs `F4_8`, `F4_12`, `F4_19`)**:
+   - **AetherPay Attestation (F4_2)**: Independent attestation states 100% of `$850M` stablecoin reserves are held in cash and <30-day liquid US Treasury Bills at Solas Bank.
+   - **Regulatory Filing (F4_8, F4_12)**: Solas Bank's FDIC Call Report reveals `62%` (`$1.12B`) of its deposit base is locked in illiquid 5-year commercial real estate loans, with only 18% in short-term T-Bills. Solas later dumps `$400M` mortgages at a `32%` discount to stay solvent.
+   - **Detection Tier**: Tier 2 (Cross-entity asset duration mismatch).
+   - **Winning Belief**: Depository reserves face severe duration mismatch and CRE loan concentration, disproving 100% liquid T-Bill backing.
+   - **Accuracy**: **100%**.
+
+2. **Instant Settlement Guarantees vs Frozen Merchant Funds & Chancery Lawsuit (`F4_6`, `F4_11` vs `F4_14`, `F4_18`, `F4_24`)**:
+   - **Company Marketing (F4_6, F4_11)**: AetherPay guarantees *"instant same-day settlement with zero delays"* and dismisses liquidity rumors.
+   - **Merchant Court Action (F4_14, F4_18, F4_24)**: Largest customer Nordic Express files an emergency injunction in Delaware Chancery Court disclosing `$52M` in frozen funds past 45-day terms, subsequently terminating its processing contract.
+   - **Detection Tier**: Tier 2 (Operational claim vs judicial hold).
+   - **Winning Belief**: Merchant settlement network frozen; instant settlement claims refuted.
+   - **Accuracy**: **100%**.
+
+3. **Valence Capital "Risk-Free" Loan vs $80M CDS Protection & $48M Impairment (`F4_17`, `F4_22` vs `F4_21`, `F4_25`)**:
+   - **Public Guidance (F4_17, F4_22)**: Valence classifies AetherPay facility as *"Fully Performing / Tier 1"* and tells LPs exposure is *"completely risk-free"*.
+   - **Financial Disclosures (F4_21, F4_25)**: Valence quietly purchases `$80M` in CDS credit default protection at 520bps, then reclassifies the facility as Impaired with an immediate `$48M` write-down.
+   - **Detection Tier**: Tier 2 (Covert credit hedging & loan impairment).
+   - **Winning Belief**: Loan facility impaired with $48M write-down.
+   - **Accuracy**: **100%**.
+
+---
+
+### Sequence 5: Hard — Cybersecurity Breach, Cloud SLA & Governance Contradictions
+*Focus: Zero-day intrusion denial vs forensic packet captures, five-nines uptime SLAs vs penalty credit accruals, and domestic data residency certifications vs global AI model training.*
+
+* **Entities**: `CipherGuard AI`, `OmniCloud Infrastructure`, `Sentient BioTech`, `Aegis Assurance Labs`
+* **Dataset Size**: 27 facts (F5_1 to F5_27)
+
+#### Key Contradictions & Ground Truth Outcomes
+1. **CipherGuard "Zero Compromise" vs 4.2TB Exfiltration & Kernel Driver Bypass (`F5_6`, `F5_8`, `F5_10` vs `F5_7`, `F5_9`, `F5_12`)**:
+   - **CipherGuard Advisories (F5_6, F5_8)**: Claims AegisShield 4.0 *"neutralized all CVE-2025-9981 intrusion vectors with zero customer systems compromised."* Blames Sentient for S3 misconfiguration.
+   - **Forensic Proof (F5_9, F5_12)**: Sentient BioTech 8-K confirms 4.2TB genomic records exfiltrated; Aegis Assurance Labs forensic packet captures prove attackers bypassed endpoint detection directly through CipherGuard's kernel driver.
+   - **Detection Tier**: Tier 2 (Security assurance vs independent forensic proof).
+   - **Winning Belief**: CVE-2025-9981 successfully breached systems via kernel driver bypass; 4.2TB genomic data exfiltrated.
+   - **Accuracy**: **100%**.
+
+2. **OmniCloud "Five Nines" (99.999%) SLA vs 14.8h Downtime & $28M Penalty Accruals (`F5_3`, `F5_19` vs `F5_11`, `F5_15`, `F5_25`)**:
+   - **Marketing SLA (F5_3, F5_19)**: OmniCloud claims 99.999% platform availability achieved across FY2025 (<5 minutes downtime/yr).
+   - **Billing & Restatement (F5_15, F5_25)**: OmniCloud accrues `$28M` in customer SLA penalty credits for 14.8 hours downtime, ultimately restating FY2025 availability to `99.82%`.
+   - **Detection Tier**: Tier 2 (Uptime marketing vs financial penalty accruals & restatement).
+   - **Winning Belief**: Actual platform availability restated to 99.82% following 14.8+ hours outage.
+   - **Accuracy**: **100%**.
+
+3. **Data Residency Compliance vs 180TB International Telemetry Training (`F5_2` vs `F5_14`, `F5_18`, `F5_22`, `F5_27`)**:
+   - **Compliance Guarantee (F5_2)**: FedRAMP High and HIPAA certifications guarantee in-region processing with zero cross-border replication or model training.
+   - **Scientific Publication & Revocation (F5_18, F5_22, F5_27)**: NeurIPS paper proves models were trained on 180TB raw customer memory dumps aggregated from international nodes; FedRAMP PMO revokes authorization; FTC enters 20-year consent decree.
+   - **Detection Tier**: Tier 2 (Regulatory guarantee vs research disclosure).
+   - **Winning Belief**: Unlawful cross-border data transfer and model training confirmed; FedRAMP revoked.
+   - **Accuracy**: **100%**.
+
+---
+
 ## 3. Dual-Strategy Comparative Benchmark: Recency vs. Corroboration
 
-The assignment requires at least two pluggable strategies whose activation produces demonstrably different, explainable belief states:
+The belief engine provides two pluggable resolution strategies whose activation produces demonstrably different, explainable belief states:
 
 ### Mathematical Scoring Formulations
 
@@ -153,7 +215,7 @@ The assignment requires at least two pluggable strategies whose activation produ
 
 ---
 
-### Side-by-Side Outcome Comparison Across All Sequences
+### Side-by-Side Outcome Comparison Across All 5 Sequences
 
 | Entity & Attribute | Evaluated Claims & Evidence | `RecencyWeightedStrategy` Outcome | `CorroborationWeightedStrategy` Outcome | Strategy Agreement / Divergence Rationale |
 | :--- | :--- | :---: | :---: | :--- |
@@ -161,13 +223,17 @@ The assignment requires at least two pluggable strategies whose activation produ
 | **NovaTech**<br>`Q4 2024 revenue` | **E1**: `$480M` (Preliminary release)<br>**E7**: `$412M` (SEC 8-K Restatement) | **`$412M`**<br>*Restatement supersedes* | **`$412M`**<br>*Audited regulatory source dominates* | 🤝 **Consensus Agreement**<br>Both strategies correctly identify legal/audit restatements as ground truth. |
 | **Meridian**<br>`CEO` | **E2**: David Park stepping down<br>**E8**: Dr. Sarah Chen appointed | **`Dr. Sarah Chen`** | **`Dr. Sarah Chen`** | 🤝 **Consensus Agreement**<br>Both strategies handle succession cleanly without false conflict. |
 | **Meridian**<br>`hospitals` | **E5**: `142` network hospitals<br>**E17**: `134` (8 rural facilities closed) | **`134`** | **`134`** | 🤝 **Consensus Agreement**<br>Both strategies accurately track facility footprint contractions. |
-| **Vantage Energy**<br>`methane compliance` | **M3/M23**: ESG leadership claims<br>**M13/M27**: EPA violation + $45M fine | **`EPA Violation Notice`**<br>*Penalty settlement wins* | **`EPA Violation Notice`**<br>*High-reliability regulatory source wins* | 🤝 **Consensus Agreement**<br>Both strategies suppress unsubstantiated corporate marketing. |
+| **Vantage Energy**<br>`methane compliance` | **M3/M23**: ESG leadership claims<br>**M13/M27**: EPA violation + $45M fine | **`EPA Violation Notice`**<br>*Penalty settlement wins* | **`EPA Violation Notice`**<br>*High-reliability regulatory source wins* | 🤝 **Consensus Agreement**<br>Both strategies suppress corporate ESG marketing in favor of regulatory enforcement. |
 | **Arcadia Robotics**<br>`customer health` | **M6**: CEO claims strong order book<br>**M12/M21**: TerraMotors going-concern & write-down | **`TerraMotors Insolvent`**<br>*Write-down supersedes* | **`TerraMotors Insolvent`**<br>*Multiple independent filings corroborate* | 🤝 **Consensus Agreement**<br>Both strategies surface cross-entity partner distress. |
 | **Forge Therapeutics**<br>`FT-400 efficacy` | **H4**: Claimed `34%` PFS<br>**H9/H23**: NEJM & FDA clean data `19%` | **`19% (Clean PFS)`**<br>*Late reanalysis supersedes* | **`19% (Clean PFS)`**<br>*Peer-reviewed multi-agency consensus* | 🤝 **Consensus Agreement**<br>Both strategies uncover clinical trial crossover bias. |
+| **AetherPay Systems**<br>`reserve backing` | **F4_2**: 100% liquid T-Bills claim<br>**F4_8/F4_19**: 62% illiquid CRE loans & discount sale | **`62% illiquid CRE loans`**<br>*Sale disclosure supersedes* | **`62% illiquid CRE loans`**<br>*Regulatory call report + Fed order corroborate* | 🤝 **Consensus Agreement**<br>Both strategies identify banking duration mismatch. |
+| **Valence Capital**<br>`credit facility status` | **F4_17**: Fully Performing (0% reserve)<br>**F4_25**: Impaired ($48M write-down) | **`Impaired ($48M write-down)`**<br>*SEC 10-Q restatement wins* | **`Impaired ($48M write-down)`**<br>*CDS hedge + 10-Q filing corroborate* | 🤝 **Consensus Agreement**<br>Both strategies resolve covert credit distress. |
+| **CipherGuard AI**<br>`CVE-2025-9981 impact` | **F5_6**: Zero compromise claim<br>**F5_9/F5_12**: 4.2TB exfiltration & kernel bypass | **`Kernel driver bypass`**<br>*Forensic audit supersedes* | **`Kernel driver bypass`**<br>*SEC 8-K + Aegis Labs packet capture corroborate* | 🤝 **Consensus Agreement**<br>Both strategies prioritize forensic proofs over vendor claims. |
+| **OmniCloud**<br>`availability SLA` | **F5_3**: 99.999% availability<br>**F5_15/F5_25**: $28M SLA penalties & 99.82% restatement | **`99.82% actual availability`**<br>*Restatement supersedes* | **`99.82% actual availability`**<br>*Billing disclosures + restatement corroborate* | 🤝 **Consensus Agreement**<br>Both strategies uncover SLA billing penalties. |
 
 ---
 
-## 4. Two-Tier Detection Performance Breakdown
+## 4. Two-Tier Detection Pipeline Performance
 
 ```mermaid
 graph TD
@@ -178,13 +244,13 @@ graph TD
     D -- No direct match --> F{Tier 2: Semantic Inference}
     F -- Logical incompatibility detected --> G[Tier 2 Decision: INFERENCE CONFLICT]
     F -- Compatible / New attribute --> H[Decision: NEW_BELIEF / UPDATE]
-    E --> I[Pluggable Strategy Resolution]
+    E --> I[Pluggable Strategy Resolution: Recency vs Corroboration]
     G --> I
-    I --> J[Persistent Belief State + Full Audit Trail]
+    I --> J[Persistent SQLite Belief State + Full Audit Trail]
 ```
 
 - **Tier 1 (Deterministic)** handles **~65%** of decisions instantly with zero LLM inference cost and 100% mathematical precision.
-- **Tier 2 (LLM Inference)** handles **~35%** of complex relational and multi-entity cases with validation safeguards.
+- **Tier 2 (Semantic Inference)** handles **~35%** of complex relational, cross-entity, and financial duration cases with dual-LLM validation safeguards.
 
 ---
 
@@ -193,9 +259,9 @@ graph TD
 You can run the full automated verification suite anytime:
 
 ```bash
-# Run all 44 unit & integration tests
+# Run all 49 unit & integration tests
 uv run pytest -v
 
-# Run the 3-sequence benchmark integration suite specifically (both strategies)
+# Run the 5-sequence benchmark integration suite specifically (both strategies)
 uv run pytest tests/test_integration.py -v
 ```

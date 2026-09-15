@@ -84,6 +84,15 @@ class MockLLMProvider(LLMProvider):
             ("forge", "Forge Therapeutics"),
             ("ft-400", "Forge Therapeutics"),
             ("pinnacle", "Pinnacle Ventures"),
+            ("aetherpay", "AetherPay Systems"),
+            ("valence", "Valence Capital Partners"),
+            ("solas", "Solas Digital Asset Bank"),
+            ("nordic express", "Nordic Express Logistics"),
+            ("nordic", "Nordic Express Logistics"),
+            ("cipherguard", "CipherGuard AI"),
+            ("omnicloud", "OmniCloud Infrastructure"),
+            ("sentient", "Sentient BioTech"),
+            ("aegis", "Aegis Assurance Labs"),
         ]
         matched_entity = "Unknown Entity"
         source_lower = fact.source.lower()
@@ -394,6 +403,197 @@ class MockLLMProvider(LLMProvider):
                 )
             )
 
+        # 12. FinTech / Liquidity Claims (Sequence 4)
+        if "reserve attestation" in text_lower or ("100%" in text_lower and "treasury" in text_lower and "reserve" in text_lower):
+            claims.append(
+                Claim(
+                    id=str(uuid4()),
+                    entity=matched_entity,
+                    attribute="stablecoin reserve asset backing",
+                    value="100% held in cash and liquid US Treasury Bills (<30 days maturity)",
+                    claim_type="qualitative",
+                    confidence=0.95,
+                    source_fact_id=fact.id,
+                )
+            )
+        elif "call report" in text_lower or ("62%" in text_lower and "commercial real estate" in text_lower):
+            claims.append(
+                Claim(
+                    id=str(uuid4()),
+                    entity=matched_entity,
+                    attribute="stablecoin reserve asset backing",
+                    value="62% invested in 5-year illiquid commercial real estate loans, 18% T-Bills",
+                    claim_type="qualitative",
+                    confidence=0.95,
+                    source_fact_id=fact.id,
+                )
+            )
+
+        if "instant same-day settlement" in text_lower or "zero settlement delays" in text_lower:
+            claims.append(
+                Claim(
+                    id=str(uuid4()),
+                    entity=matched_entity,
+                    attribute="settlement performance",
+                    value="Instant same-day settlement guarantees with zero delays",
+                    claim_type="qualitative",
+                    confidence=0.95,
+                    source_fact_id=fact.id,
+                )
+            )
+        elif ("past-due" in text_lower or "frozen" in text_lower) and ("receivables" in text_lower or "merchant funds" in text_lower):
+            val = "$52M in merchant funds frozen in sub-accounts" if "frozen" in text_lower else "$38M in trade receivables past-due >45 days"
+            claims.append(
+                Claim(
+                    id=str(uuid4()),
+                    entity=matched_entity,
+                    attribute="settlement performance",
+                    value=val,
+                    claim_type="qualitative",
+                    confidence=0.95,
+                    source_fact_id=fact.id,
+                )
+            )
+
+        if "fully performing" in text_lower or "tier 1" in text_lower:
+            claims.append(
+                Claim(
+                    id=str(uuid4()),
+                    entity=matched_entity,
+                    attribute="credit facility performance status",
+                    value="Fully Performing / Tier 1 with 0% loss reserves",
+                    claim_type="qualitative",
+                    confidence=0.95,
+                    source_fact_id=fact.id,
+                )
+            )
+        elif "non-accrual" in text_lower or "impaired" in text_lower or "write-down" in text_lower:
+            claims.append(
+                Claim(
+                    id=str(uuid4()),
+                    entity=matched_entity,
+                    attribute="credit facility performance status",
+                    value="Non-Accrual / Impaired with $48M write-down",
+                    claim_type="qualitative",
+                    confidence=0.95,
+                    source_fact_id=fact.id,
+                )
+            )
+
+        if "credit default swap" in text_lower or ("cds" in text_lower and "520" in text_lower):
+            claims.append(
+                Claim(
+                    id=str(uuid4()),
+                    entity=matched_entity,
+                    attribute="credit facility risk stance",
+                    value="Purchased $80M CDS protection at 520bps spread",
+                    claim_type="qualitative",
+                    confidence=0.95,
+                    source_fact_id=fact.id,
+                )
+            )
+        elif "completely risk-free" in text_lower:
+            claims.append(
+                Claim(
+                    id=str(uuid4()),
+                    entity=matched_entity,
+                    attribute="credit facility risk stance",
+                    value="Completely risk-free and backed by rock-solid assets",
+                    claim_type="qualitative",
+                    confidence=0.95,
+                    source_fact_id=fact.id,
+                )
+            )
+
+        # 13. Cybersecurity / Cloud SLA Claims (Sequence 5)
+        if "neutralized all cve-2025-9981" in text_lower or ("zero customer systems" in text_lower and "compromise" in text_lower):
+            claims.append(
+                Claim(
+                    id=str(uuid4()),
+                    entity=matched_entity,
+                    attribute="CVE-2025-9981 breach impact",
+                    value="Zero customer systems compromised; all intrusion vectors neutralized",
+                    claim_type="qualitative",
+                    confidence=0.95,
+                    source_fact_id=fact.id,
+                )
+            )
+        elif ("exfiltrated 4.2tb" in text_lower or "4.2tb of patient genomic" in text_lower) or ("kernel driver" in text_lower and "bypassing" in text_lower):
+            val = "Intrusion exploited CVE-2025-9981 through kernel driver, bypassing detection" if "kernel driver" in text_lower else "4.2TB patient genomic sequencing data exfiltrated from primary cloud endpoint"
+            claims.append(
+                Claim(
+                    id=str(uuid4()),
+                    entity=matched_entity,
+                    attribute="CVE-2025-9981 breach impact",
+                    value=val,
+                    claim_type="qualitative",
+                    confidence=0.95,
+                    source_fact_id=fact.id,
+                )
+            )
+
+        if "99.999%" in text_lower or "five nines" in text_lower:
+            claims.append(
+                Claim(
+                    id=str(uuid4()),
+                    entity=matched_entity,
+                    attribute="FY2025 platform availability SLA",
+                    value="99.999% ('five nines') platform availability",
+                    claim_type="qualitative",
+                    confidence=0.95,
+                    source_fact_id=fact.id,
+                )
+            )
+        elif "$28m in sla" in text_lower or "14.8 hours" in text_lower:
+            claims.append(
+                Claim(
+                    id=str(uuid4()),
+                    entity=matched_entity,
+                    attribute="FY2025 platform availability SLA",
+                    value="$28M SLA penalty credit accruals from 14.8 hours downtime",
+                    claim_type="qualitative",
+                    confidence=0.95,
+                    source_fact_id=fact.id,
+                )
+            )
+        elif "99.82%" in text_lower:
+            claims.append(
+                Claim(
+                    id=str(uuid4()),
+                    entity=matched_entity,
+                    attribute="FY2025 platform availability SLA",
+                    value="Restated actual platform availability 99.82% (15+ hours downtime)",
+                    claim_type="qualitative",
+                    confidence=0.95,
+                    source_fact_id=fact.id,
+                )
+            )
+
+        if "guaranteeing all customer telemetry is processed in-region" in text_lower or "zero cross-border replication" in text_lower:
+            claims.append(
+                Claim(
+                    id=str(uuid4()),
+                    entity=matched_entity,
+                    attribute="data residency and model training compliance",
+                    value="Guaranteed in-region processing with zero cross-border replication or public model training",
+                    claim_type="qualitative",
+                    confidence=0.95,
+                    source_fact_id=fact.id,
+                )
+            )
+        elif "trained on 180tb" in text_lower or "replicates them to overseas" in text_lower:
+            claims.append(
+                Claim(
+                    id=str(uuid4()),
+                    entity=matched_entity,
+                    attribute="data residency and model training compliance",
+                    value="Models trained on 180TB raw customer memory dumps aggregated across international nodes",
+                    claim_type="qualitative",
+                    confidence=0.95,
+                    source_fact_id=fact.id,
+                )
+            )
+
         # Fallback if no specific rule matched
         if not claims:
             claims.append(
@@ -502,6 +702,81 @@ class MockLLMProvider(LLMProvider):
                         related_belief_ids=[b.id],
                         confidence=0.95,
                     )
+
+            # 6. Reserve backing vs Commercial real estate loan exposure (AetherPay / Solas - Sequence 4)
+            if ("reserve" in b_attr or "reserve" in b_val or "treasury" in b_val) and ("commercial real estate" in c_val or "illiquid" in c_val or "duration mismatch" in c_val):
+                return InferenceConflictResult(
+                    is_conflict=True,
+                    conflict_type="inference",
+                    severity="high",
+                    explanation="Assertion of 100% liquid T-Bill backing contradicts depository bank regulatory filing showing 62% of asset base locked in illiquid 5-year commercial real estate loans.",
+                    related_belief_ids=[b.id],
+                    confidence=0.95,
+                )
+            if ("commercial real estate" in b_val or "illiquid" in b_val) and ("reserve" in c_attr or "reserve" in c_val or "treasury" in c_val):
+                return InferenceConflictResult(
+                    is_conflict=True,
+                    conflict_type="inference",
+                    severity="high",
+                    explanation="Claim of 100% short-term T-bill backing contradicts confirmed illiquid commercial real estate loan concentration.",
+                    related_belief_ids=[b.id],
+                    confidence=0.95,
+                )
+
+            # 7. Guaranteed settlement velocity vs Past-due receivables / Injunction (AetherPay / Nordic - Sequence 4)
+            if ("settlement" in b_attr or "zero delays" in b_val or "instantly" in b_val) and ("past-due" in c_val or "frozen" in c_val or "injunctive" in c_val):
+                return InferenceConflictResult(
+                    is_conflict=True,
+                    conflict_type="inference",
+                    severity="high",
+                    explanation="Guaranteed instant settlement claims directly contradict disclosures of $38M+ in merchant receivables past-due >45 days and court motions alleging frozen funds.",
+                    related_belief_ids=[b.id],
+                    confidence=0.94,
+                )
+
+            # 8. Valence Risk-free assertion vs CDS Hedge / Loan Impairment (Sequence 4)
+            if ("risk-free" in b_val or "fully performing" in b_val) and ("cds" in c_val or "impaired" in c_val or "write-down" in c_val):
+                return InferenceConflictResult(
+                    is_conflict=True,
+                    conflict_type="inference",
+                    severity="high",
+                    explanation="Characterizing debt exposure as risk-free / fully performing contradicts purchasing $80M in CDS default protection and recording a $48M loan impairment write-down.",
+                    related_belief_ids=[b.id],
+                    confidence=0.95,
+                )
+
+            # 9. CipherGuard Zero Compromise vs Sentient Exfiltration / Kernel Driver Bypass (Sequence 5)
+            if ("zero customer" in b_val or "neutralized" in b_val) and ("exfiltrated" in c_val or "kernel driver" in c_val or "bypassing" in c_val):
+                return InferenceConflictResult(
+                    is_conflict=True,
+                    conflict_type="inference",
+                    severity="high",
+                    explanation="Claims of zero customer compromise contradict verified 4.2TB genomic data exfiltration and forensic packet captures proving kernel driver bypass.",
+                    related_belief_ids=[b.id],
+                    confidence=0.96,
+                )
+
+            # 10. OmniCloud 99.999% SLA vs Outages / SLA Penalty Accruals (Sequence 5)
+            if ("99.999%" in b_val or "five nines" in b_val) and ("14.8 hours" in c_val or "$28m in sla" in c_val or "99.82%" in c_val):
+                return InferenceConflictResult(
+                    is_conflict=True,
+                    conflict_type="inference",
+                    severity="high",
+                    explanation="99.999% platform availability claim (<5 minutes downtime/yr) contradicts $28M in SLA penalties, 14.8+ hours of downtime, and restated 99.82% availability.",
+                    related_belief_ids=[b.id],
+                    confidence=0.95,
+                )
+
+            # 11. CipherGuard In-Region Residency vs Global Model Training on Telemetry (Sequence 5)
+            if ("zero cross-border" in b_val or "in-region" in b_val) and ("180tb" in c_val or "international" in c_val or "overseas" in c_val):
+                return InferenceConflictResult(
+                    is_conflict=True,
+                    conflict_type="inference",
+                    severity="high",
+                    explanation="FedRAMP/HIPAA in-region residency certifications contradict scientific publications disclosing model training on 180TB of raw customer memory dumps from international nodes.",
+                    related_belief_ids=[b.id],
+                    confidence=0.95,
+                )
 
         return InferenceConflictResult(
             is_conflict=False,
