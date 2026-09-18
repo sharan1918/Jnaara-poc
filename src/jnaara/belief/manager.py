@@ -111,6 +111,9 @@ class BeliefManager:
                 case "DISCARD_NOISE":
                     logger.debug("Claim %s discarded as noise. Decision logged.", claim.id)
 
+                case "ABSTAIN":
+                    logger.info("Claim %s held in ABSTAIN state due to uncertainty / ambiguity. Decision logged.", claim.id)
+
             step_results.append((decision, conflict))
 
         return ProcessingResult(

@@ -31,6 +31,15 @@ class ConflictDetector:
 
     def detect(self, claim: Claim, fact: Fact) -> tuple[Decision, Conflict | None]:
         """Main detection entrypoint. Evaluates an incoming claim against existing beliefs."""
+        # 0. Check for explicit low-confidence / ambiguity abstention
+        if self._should_abstain(claim, fact):
+            return self._abstain_decision(
+                claim,
+                fact,
+                reason=f"Claim confidence ({claim.confidence:.2f}) is below reliable threshold or contains unverified speculation",
+                uncertainty_score=round(1.0 - claim.confidence, 3),
+            ), None
+
         existing_beliefs = self.repository.get_beliefs_for_entity(claim.entity, status=None)
         # Also retrieve active beliefs for potential cross-entity checks
         all_active_beliefs = self.repository.get_all_beliefs(status="active")
@@ -216,12 +225,21 @@ class ConflictDetector:
 
     def _is_temporal_update(self, claim: Claim, belief: Belief, fact: Fact) -> bool:
         """Check if incoming claim chronologically succeeds and cleanly supersedes previous belief."""
-        # e.g., CEO stepping down followed by appointment of new CEO
         b_val = belief.value.lower()
         c_val = claim.value.lower()
-        if "stepping down" in b_val or "resigned" in b_val or "vacancy" in b_val:
-            if "appointed" in c_val or "dr." in c_val or "ceo" in c_val:
+
+        # Leadership departure followed by appointment/succession
+        transition_departures = ["stepping down", "resigned", "resignation", "vacancy", "departing", "retired", "interim"]
+        succession_announcements = ["appointed", "named", "elected", "hired", "promoted", "succeeds", "joined", "incoming", "new ceo", "dr.", "ceo"]
+        if any(dep in b_val for dep in transition_departures):
+            if any(suc in c_val for suc in succession_announcements):
                 return True
+
+        # State transition from scheduled/planned to finalized/active
+        if any(pre in b_val for pre in ["planned", "proposed", "scheduled", "draft"]):
+            if any(post in c_val for post in ["completed", "finalized", "approved", "active", "implemented"]):
+                return True
+
         return False
 
     def _states_incompatible(self, claim: Claim, belief: Belief) -> bool:
@@ -238,22 +256,36 @@ class ConflictDetector:
         # Multi-entity or relational claim
         if claim.claim_type == "relational":
             return True
-        # Entity names that involve known complex relationships
-        complex_entities = {"Helios Semiconductor", "Atlas Cloud Systems", "Forge Therapeutics", "Arcadia Robotics"}
-        if claim.entity in complex_entities and len(beliefs) > 3:
+        # Dense context with multiple prior beliefs where semantic nuances often occur
+        if len(beliefs) >= 3 and claim.claim_type in ("qualitative", "event"):
+            return True
+        # Moderate confidence claim where a second opinion guards against hallucination
+        if 0.60 <= claim.confidence < 0.85:
+            return True
+        # Text markers suggesting conditional, contested, or cross-entity claims
+        val_lower = (claim.value + " " + claim.attribute).lower()
+        if any(w in val_lower for w in ["exclusive", "partner", "supply", "capacity", "hedge", "guarantee", "compliance", "dispute", "investigation"]):
             return True
         return False
 
     def _check_cross_entity_inference(
         self, claim: Claim, all_beliefs: list[Belief]
     ) -> tuple[Decision, Conflict | None] | None:
-        """Deterministic check for cross-entity incompatibilities (Sequence 2 / Sequence 3)."""
-        # E.g. Arcadia claims strong customer health, but TerraMotors has belief of insolvency/distress
+        """Deterministic check for cross-entity incompatibilities based on relational tensions."""
         claim_text = (claim.attribute + " " + claim.value).lower()
-        if "customer" in claim_text and ("strong" in claim_text or "healthy" in claim_text):
+
+        # 1. Partner / customer health vs confirmed counterparty distress
+        partner_positive_markers = ["customer", "partner", "order book", "client relationship", "counterparty"]
+        positive_health_markers = ["strong", "healthy", "growing", "robust", "no concern", "fully performing"]
+        distress_markers = ["distress", "insolvency", "insolvent", "bankruptcy", "default", "frozen", "injunction", "layoff"]
+
+        is_partner_assertion = any(p in claim_text for p in partner_positive_markers)
+        is_positive_health = any(h in claim_text for h in positive_health_markers)
+
+        if is_partner_assertion and is_positive_health:
             for b in all_beliefs:
                 b_text = (b.entity + " " + b.attribute + " " + b.value).lower()
-                if ("distress" in b_text or "insolvency" in b_text or "layoff" in b_text) and b.status == "active":
+                if any(dm in b_text for dm in distress_markers) and b.status == "active":
                     conflict = Conflict(
                         id=str(uuid4()),
                         conflict_type="inference",
@@ -263,8 +295,8 @@ class ConflictDetector:
                         incoming_claim_id=claim.id,
                         severity="high",
                         description=(
-                            f"Cross-entity contradiction: '{claim.entity}' asserts healthy customer relations, "
-                            f"contradicting confirmed distress in key customer '{b.entity}' (Belief {b.id})."
+                            f"Cross-entity contradiction: '{claim.entity}' asserts healthy relations/order book, "
+                            f"contradicting confirmed distress in related entity '{b.entity}' (Belief {b.id})."
                         ),
                     )
                     decision = Decision(
@@ -272,10 +304,39 @@ class ConflictDetector:
                         fact_id=claim.source_fact_id,
                         claim_id=claim.id,
                         action="CONFLICT",
-                        reason="Cross-entity contradiction with related partner belief",
+                        reason=f"Cross-entity contradiction with distress belief in related counterparty {b.entity}",
                         tier="inference",
                     )
                     return decision, conflict
+
+        # 2. Exclusivity claims vs counterparty alternative vendor qualification
+        if "exclusive" in claim_text or "sole supplier" in claim_text:
+            for b in all_beliefs:
+                b_text = (b.attribute + " " + b.value).lower()
+                if any(kw in b_text for kw in ["alternative vendor", "custom asic", "dual sourcing", "qualifying"]) and b.status == "active":
+                    conflict = Conflict(
+                        id=str(uuid4()),
+                        conflict_type="inference",
+                        entity=claim.entity,
+                        attribute=claim.attribute,
+                        existing_belief_id=b.id,
+                        incoming_claim_id=claim.id,
+                        severity="medium",
+                        description=(
+                            f"Cross-entity contradiction: '{claim.entity}' claims exclusive relationship, "
+                            f"contradicting verified alternative sourcing activity by counterparty '{b.entity}'."
+                        ),
+                    )
+                    decision = Decision(
+                        id=str(uuid4()),
+                        fact_id=claim.source_fact_id,
+                        claim_id=claim.id,
+                        action="CONFLICT",
+                        reason=f"Cross-entity contradiction with alternative sourcing belief {b.id}",
+                        tier="inference",
+                    )
+                    return decision, conflict
+
         return None
 
     def _evaluate_dual_analysis(
@@ -304,6 +365,13 @@ class ConflictDetector:
             # High reliability incoming fact takes serious consideration
             active_res = dual.groq_analysis if dual.groq_analysis.is_conflict else dual.gemini_analysis  # type: ignore
             return self._create_inference_conflict(claim, fact, active_res, beliefs)
+        elif fact.source_reliability == "low":
+            return self._abstain_decision(
+                claim,
+                fact,
+                reason="Dual LLM models disagreed on conflict classification for a low-reliability source claim.",
+                uncertainty_score=0.75,
+            ), None
 
         return self._update_or_new_decision(claim, fact, beliefs), None
 
@@ -359,3 +427,33 @@ class ConflictDetector:
                 tier="deterministic",
             )
         return self._new_belief_decision(claim, fact, reason="New distinct attribute for entity")
+
+    def _should_abstain(self, claim: Claim, fact: Fact) -> bool:
+        """Evaluate if the engine should abstain due to low confidence, extreme ambiguity, or unverified rumor."""
+        # 1. Very low claim confidence (< 0.40)
+        if claim.confidence < 0.40:
+            return True
+        # 2. Low-reliability rumor with explicitly vague/unconfirmed qualifiers
+        text_lower = fact.content.lower()
+        ambiguous_markers = ["unconfirmed rumor", "unverified report", "might be", "allegedly", "speculation suggests"]
+        if fact.source_reliability == "low" and any(m in text_lower for m in ambiguous_markers):
+            return True
+        return False
+
+    def _abstain_decision(
+        self,
+        claim: Claim,
+        fact: Fact,
+        reason: str = "Uncertain / ambiguous claim held for review",
+        uncertainty_score: float = 0.5,
+    ) -> Decision:
+        return Decision(
+            id=str(uuid4()),
+            fact_id=fact.id,
+            claim_id=claim.id,
+            action="ABSTAIN",
+            reason=reason,
+            tier="deterministic",
+            uncertainty_score=uncertainty_score,
+            uncertainty_reason=reason,
+        )
