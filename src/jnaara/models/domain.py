@@ -78,9 +78,11 @@ class Decision(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid4()))
     fact_id: str
     claim_id: str
-    action: Literal["NEW_BELIEF", "UPDATE", "CONFLICT", "DISCARD_NOISE"]
+    action: Literal["NEW_BELIEF", "UPDATE", "CONFLICT", "DISCARD_NOISE", "ABSTAIN"]
     reason: str
     tier: Literal["deterministic", "inference"]
+    uncertainty_score: float | None = None
+    uncertainty_reason: str | None = None
     created_at: datetime = Field(default_factory=utc_now)
 
     model_config = ConfigDict(extra="ignore")
