@@ -17,7 +17,13 @@ from jnaara.config import Settings, get_settings
 from jnaara.conflict.detector import ConflictDetector
 from jnaara.conflict.resolver import ConflictResolver
 from jnaara.db.engine import get_db_engine, get_session_factory, init_db
+from rich.table import Table
 from jnaara.db.repository import Repository
+from jnaara.evaluation import (
+    EvaluationDatasetLoader,
+    EvaluatorEngine,
+    save_markdown_report,
+)
 from jnaara.evaluation.reporter import save_evaluation_report
 from jnaara.ingestion.ingestor import FactIngestor
 from jnaara.llm.factory import create_providers
@@ -287,6 +293,141 @@ def serve(
     console.print(f"[bold green]Starting Jnaara API server at[/bold green] [cyan]http://{host}:{port}[/cyan]")
     console.print(f"API Docs available at: [cyan]http://{host}:{port}/docs[/cyan]")
     uvicorn.run("jnaara.api.main:app", host=host, port=port, reload=reload)
+
+
+@app.command(name="eval")
+def evaluate(
+    split: str = typer.Option("test", "--split", "-s", help="Dataset split to evaluate ('dev', 'val', 'test')"),
+    dataset: Optional[Path] = typer.Option(None, "--dataset", "-d", help="Custom evaluation dataset path"),
+    provider: str = typer.Option("mock", "--provider", "-p", help="Evaluator provider ('mock' for deterministic offline, 'live' or 'groq' for live LLM)"),
+    output: Path = typer.Option(Path("docs/evaluation.md"), "--output", "-o", help="Path to write markdown evaluation report"),
+    json_output: Optional[Path] = typer.Option(None, "--json-output", help="Optional path to write raw JSON evaluation payload"),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Display full example-by-example traces"),
+):
+    """Run independent evaluation against labeled benchmarks and generate performance & failure reports."""
+    settings = get_settings()
+
+    console.print(f"\n[bold cyan]=== Jnaara Independent Evaluation Engine ===[/bold cyan]")
+    console.print(f"Target Split: [bold yellow]{split}[/bold yellow] | Provider: [bold cyan]{provider}[/bold cyan] | Dataset: {dataset or 'default split'}")
+
+    try:
+        examples = EvaluationDatasetLoader.load_split(split=split, custom_path=dataset)
+        meta = EvaluationDatasetLoader.get_dataset_metadata(split=split, custom_path=dataset)
+    except Exception as exc:
+        console.print(f"[bold red]Error loading evaluation dataset:[/bold red] {exc}")
+        raise typer.Exit(1)
+
+    console.print(f"Loaded [bold green]{len(examples)}[/bold green] evaluation examples across 15 categories.")
+    if meta.get("synthetic"):
+        console.print("[dim italic]Notice: Running against synthetic benchmark dataset (not real-world telemetry).[/dim italic]")
+
+    # Initialize evaluator provider
+    has_groq = bool(settings.groq_api_key and settings.groq_api_key.get_secret_value().strip())
+    has_google = bool(settings.google_api_key and settings.google_api_key.get_secret_value().strip())
+
+    if provider.lower() in ("live", "groq", "gemini"):
+        if not (has_groq or has_google):
+            console.print("[yellow]Warning: Live API keys not found in environment; falling back to MockLLMProvider.[/yellow]")
+            p_factory = lambda: MockLLMProvider("eval-primary")
+            s_factory = lambda: MockLLMProvider("eval-secondary")
+            prov_label = "MockLLMProvider (Deterministic Offline)"
+        else:
+            p_factory = lambda: create_providers(settings)[0]
+            s_factory = lambda: create_providers(settings)[1]
+            prov_label = f"Live LLM ({settings.primary_llm})"
+    else:
+        p_factory = lambda: MockLLMProvider("eval-primary")
+        s_factory = lambda: MockLLMProvider("eval-secondary")
+        prov_label = "MockLLMProvider (Deterministic Offline)"
+
+    evaluator = EvaluatorEngine(
+        primary_provider_factory=p_factory,
+        secondary_provider_factory=s_factory,
+    )
+
+    console.print(f"Running evaluation with provider: [cyan]{prov_label}[/cyan]...")
+    payload = evaluator.evaluate_split(
+        examples=examples,
+        dataset_name=meta.get("dataset_name", "Jnaara Benchmark"),
+        split_name=split,
+        provider_name=prov_label,
+    )
+
+    m = payload.metrics
+    cm = m.confusion_matrix
+
+    # Scorecard Table
+    score_table = Table(title=f"Evaluation Performance Scorecard ({split.upper()} Split)", header_style="bold magenta")
+    score_table.add_column("Metric", style="cyan", justify="left")
+    score_table.add_column("Score", style="bold green", justify="right")
+    score_table.add_column("Count / Details", style="yellow", justify="left")
+
+    score_table.add_row("Accuracy", f"{m.accuracy * 100:.1f}%", f"{sum(1 for r in payload.results if r.is_correct)} / {m.total_examples} total correct")
+    score_table.add_row("Precision", f"{m.precision * 100:.1f}%", f"TP: {m.tp} / (TP: {m.tp} + FP: {m.fp})")
+    score_table.add_row("Recall (Sensitivity)", f"{m.recall * 100:.1f}%", f"TP: {m.tp} / (TP: {m.tp} + FN: {m.fn})")
+    score_table.add_row("F1 Score", f"{m.f1 * 100:.1f}%", "Harmonic mean of precision & recall")
+    score_table.add_row("Specificity", f"{m.specificity * 100:.1f}%", f"TN: {m.tn} / (TN: {m.tn} + FP: {m.fp})")
+    score_table.add_row("False Positives (FP)", f"{m.fp}", "False alarms on non-contradictions")
+    score_table.add_row("False Negatives (FN)", f"{m.fn}", "Missed contradictions")
+    score_table.add_row("Abstention Accuracy", f"{m.abstention_accuracy * 100:.1f}%", f"{cm.correct_uncertain} / {m.abstention_count} rumors correctly held")
+
+    console.print()
+    console.print(score_table)
+
+    # Confusion Matrix Table
+    cm_table = Table(title="Confusion Matrix (Predicted vs Actual)", header_style="bold blue")
+    cm_table.add_column("Actual / Predicted", style="bold", justify="left")
+    cm_table.add_column("Contradiction", justify="center")
+    cm_table.add_column("No Contradiction", justify="center")
+    cm_table.add_column("Uncertain / Abstain", justify="center")
+
+    cm_table.add_row("Contradiction", f"[bold green]{cm.tp}[/bold green] (TP)", f"[bold red]{cm.fn}[/bold red] (FN)", f"[yellow]{cm.contradiction_as_uncertain}[/yellow]")
+    cm_table.add_row("No Contradiction", f"[bold red]{cm.fp}[/bold red] (FP)", f"[bold green]{cm.tn}[/bold green] (TN)", f"[yellow]{cm.no_contradiction_as_uncertain}[/yellow]")
+    cm_table.add_row("Uncertain (Rumor)", f"[bold red]{cm.uncertain_as_contradiction}[/bold red]", f"[yellow]{cm.uncertain_as_no_contradiction}[/yellow]", f"[bold green]{cm.correct_uncertain}[/bold green]")
+
+    console.print()
+    console.print(cm_table)
+
+    # Failure Mode Summary
+    if payload.failures:
+        console.print(f"\n[bold red]Visible Failure Analysis ({len(payload.failures)} failures detected):[/bold red]")
+        fail_table = Table(header_style="bold red")
+        fail_table.add_column("ID", style="bold", width=10)
+        fail_table.add_column("Category", width=22)
+        fail_table.add_column("GT", width=12)
+        fail_table.add_column("Pred", width=12)
+        fail_table.add_column("Failure Mode", width=25)
+        fail_table.add_column("Diagnosis", width=40)
+
+        for f in payload.failures[:8]:
+            fail_table.add_row(
+                f.example_id,
+                f.category,
+                f.ground_truth,
+                f.predicted,
+                f.failure_category,
+                f.explanation[:38] + "..." if len(f.explanation) > 38 else f.explanation,
+            )
+        console.print(fail_table)
+
+    # Write Markdown Report
+    try:
+        saved_md = save_markdown_report(payload, output)
+        console.print(f"\n[bold green][OK] Evaluation report saved to:[/bold green] [cyan]{saved_md}[/cyan]")
+    except Exception as exc:
+        console.print(f"[yellow]Warning: Could not save markdown report: {exc}[/yellow]")
+
+    # Write JSON payload if requested
+    if json_output:
+        try:
+            json_output.parent.mkdir(parents=True, exist_ok=True)
+            with open(json_output, "w", encoding="utf-8") as jf:
+                jf.write(payload.model_dump_json(indent=2))
+            console.print(f"[bold green][OK] JSON payload saved to:[/bold green] [cyan]{json_output}[/cyan]")
+        except Exception as exc:
+            console.print(f"[yellow]Warning: Could not save JSON output: {exc}[/yellow]")
+
+    console.print("[dim]Evaluation run complete. Results are reproducible and independently auditable.[/dim]\n")
 
 
 if __name__ == "__main__":
