@@ -1,14 +1,20 @@
-# Jnaara Belief Engine — Evaluation Report & Multi-Sequence Benchmark Results
+# Jnaara Belief Engine — Integration Sequence Benchmark Results
 
-This document provides a comprehensive evaluation of the Jnaara belief engine across all **5 dataset sequences (138 facts total)** from `docs/jnaara_memory_facts_dataset.json` covering **15 enterprise entities**.
+> [!IMPORTANT]
+> **Methodology Clarification: Integration Sequences vs. Independent Evaluation**
+>
+> This document details the **5 End-to-End Integration Sequences** (138 facts across 15 enterprise entities) used to verify narrative consistency, state transition mechanics, and deterministic resolution strategy divergence.
+>
+> For the **formal, partition-isolated benchmark evaluation** reporting standard statistical metrics (Precision: 80.0%, Recall: 29.6%, F1: 43.2%, Specificity: 92.9%, False Positives: 2, False Negatives: 19) and failure mode diagnoses across 15 semantic categories on held-out test data, please see the primary evaluation document:
+> 👉 **[docs/evaluation.md](evaluation.md)**
 
-- **Evaluated Dataset:** `data/jnaara_memory_facts_dataset.json` (Sequences 1 through 5)
+- **Evaluated Dataset:** `data/jnaara_memory_facts_dataset.json` (Integration Sequences 1 through 5)
 - **Evaluated Strategies:** `recency` (Reliability-Weighted Recency) & `corroboration` (Independent Multi-Source Corroboration)
 - **Primary / Secondary LLM Providers:** Dual orchestration with semantic inference safeguards and deterministic state control
 
 ---
 
-## 1. Executive Performance Scorecard Across All 5 Sequences
+## 1. Integration Sanity Scorecard Across All 5 Sequences
 
 | Metric | Sequence 1 (Easy) | Sequence 2 (Medium) | Sequence 3 (Hard) | Sequence 4 (Hard) | Sequence 5 (Hard) | Total / Combined | Status |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |

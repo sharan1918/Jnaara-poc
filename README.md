@@ -17,18 +17,39 @@ This is not a vector database or an LLM wrapper. It is a **memory system** that 
 3. Resolves conflicts using pluggable, deterministic strategies
 4. Maintains an auditable trail of every belief change
 
-The system is tested against **5 sequences of increasing difficulty** (138 facts total across 15 enterprise entities):
+### Independent Benchmark Evaluation (Honest Metrics)
 
-| Sequence | Difficulty | What It Tests | Detection Rate | Resolution Accuracy |
+In accordance with rigorous evaluation methodology, Jnaara's conflict detection engine is evaluated against an independent, partition-isolated benchmark dataset (`held_out_test_set.json` with 60 examples across 15 semantic categories) with **zero data leakage**:
+
+| Metric | Score | Details / Ground Truth Counts |
+|:---|:---:|:---|
+| **Overall Accuracy** | **60.0%** | 36 / 60 total correct predictions |
+| **Precision** | **80.0%** | $\frac{TP}{TP + FP} = \frac{8}{8 + 2}$ (High trust when contradiction flagged) |
+| **Recall (Sensitivity)** | **29.6%** | $\frac{TP}{TP + FN} = \frac{8}{8 + 19}$ (Conservative detection on subtle inference) |
+| **F1 Score** | **43.2%** | Harmonic mean balancing precision and recall |
+| **Specificity** | **92.9%** | $\frac{TN}{TN + FP} = \frac{26}{26 + 2}$ (Low false alarm rate on non-contradictions) |
+| **False Positives (FP)** | **2** | False alarms on nuanced non-contradictions |
+| **False Negatives (FN)** | **19** | Subtly phrased or implicit contradictions missed |
+| **Abstention Accuracy** | **40.0%** | 2 / 5 unconfirmed rumors held for verification |
+
+👉 **Full Evaluation Report & Failure Mode Analysis:** [docs/evaluation.md](docs/evaluation.md)
+
+---
+
+### End-to-End Sequence Integration Suite
+
+In addition to independent pairwise evaluation, the repository contains **5 sequential narrative sequences** (138 facts across 15 enterprise entities) used for integration sanity testing and verifying deterministic resolution strategy switching:
+
+| Sequence | Difficulty | Scenario Focus | Tested Conflicts | Resolution Strategy Verified |
 |---|---|---|:---:|:---:|
-| **Sequence 1** | **Easy** | Clear contradictions — revenue restatements, CEO changes, facility counts | **100% (5/5)** | **100%** |
-| **Sequence 2** | **Medium** | Partial updates, conflicting sources, cross-entity partner dependencies | **100% (4/4)** | **100%** |
-| **Sequence 3** | **Hard** | Logical incompatibilities, supply chain friction, clinical trial crossover bias | **100% (4/4)** | **100%** |
-| **Sequence 4** | **Hard** | FinTech asset quality, stablecoin reserve duration mismatch, loan default hedging | **100% (3/3)** | **100%** |
-| **Sequence 5** | **Hard** | Cybersecurity breach denial vs packet captures, five-nines SLAs, telemetry training | **100% (3/3)** | **100%** |
-| **Overall** | **Benchmark** | **All 138 Facts across 15 Companies (286 Extracted Claims)** | **100% (19/19)** | **100%** |
+| **Sequence 1** | **Easy** | Revenue restatements, CEO succession, hospital closures | 5 | Recency & Corroboration |
+| **Sequence 2** | **Medium** | Partner insolvency, EPA emissions violation, unverified exit rumors | 4 | Recency & Corroboration |
+| **Sequence 3** | **Hard** | Supply chain inventory mismatch, dual vendor qualification, trial bias | 4 | Recency & Corroboration |
+| **Sequence 4** | **Hard** | FinTech asset quality, stablecoin reserve duration mismatch, loan hedging | 3 | Recency & Corroboration |
+| **Sequence 5** | **Hard** | Cybersecurity breach denial vs packet captures, five-nines SLAs | 3 | Recency & Corroboration |
+| **Integration Suite** | **Sanity** | **All 138 Facts across 15 Companies (286 Extracted Claims)** | **19** | **58/58 Tests Green** |
 
-👉 **Full Detailed Benchmark Report:** [docs/ACCURACY_AND_BENCHMARKS.md](docs/ACCURACY_AND_BENCHMARKS.md)
+👉 **Detailed Integration Sequences Analysis:** [docs/ACCURACY_AND_BENCHMARKS.md](docs/ACCURACY_AND_BENCHMARKS.md)
 
 ---
 
@@ -61,6 +82,7 @@ flowchart TD
     NEW_B["[ NEW BELIEF ]<br/>First-Time Entity Property Initialized"]:::greenBox
     UPDATE_B["[ TEMPORAL UPDATE ]<br/>Direct Supersession of Prior Version"]:::purpleBox
     CONFLICT_FLOW["[ CONFLICT DETECTED ]<br/>Contradiction Triggered Between Claims"]:::amberBox
+    ABSTAIN_B["[ ABSTAIN / UNCERTAIN ]<br/>Speculative / Rumor Held for Review"]:::amberBox
     DISCARD["[ DISCARD NOISE ]<br/>Low Confidence or Irrelevant Claim"]:::redBox
     
     STRATEGY["[ 8. RESOLUTION STRATEGY ]<br/><b>Pluggable Deterministic Engine</b><br/>Recency vs Corroboration"]:::highlightBox
@@ -80,11 +102,13 @@ flowchart TD
     TIER1 -->|"Direct Match (New Fact)"| NEW_B
     TIER1 -->|"Temporal Supersession"| UPDATE_B
     TIER1 -->|"Direct Numeric Mismatch"| CONFLICT_FLOW
+    TIER1 -->|"Low-Reliability Rumor / Speculation"| ABSTAIN_B
     TIER1 -->|"Low Confidence / Junk"| DISCARD
     TIER1 -->|"Nuanced / Relational Inference Required"| TIER2
 
     TIER2 -->|"No Conflict Inferred"| NEW_B
     TIER2 -->|"Semantic Contradiction Inferred"| CONFLICT_FLOW
+    TIER2 -->|"Dual Disagreement / Epistemic Uncertainty"| ABSTAIN_B
     TIER2 -->|"Ambiguous / Below Threshold"| DISCARD
 
     CONFLICT_FLOW --> STRATEGY
@@ -94,6 +118,7 @@ flowchart TD
     CORROB --> MANAGER
     NEW_B --> MANAGER
     UPDATE_B --> MANAGER
+    ABSTAIN_B --> MANAGER
     DISCARD --> MANAGER
 
     MANAGER --> MEMORY
@@ -341,6 +366,22 @@ Multiple sources report different customer counts with varying reliability:
 - **Recency strategy** → Believes 298 (E26 is the most recent high-reliability source)
 - **Corroboration strategy** → May differ based on independent source diversity
 
+### Independent Evaluation Runner
+
+Run independent evaluation benchmarks against partition-isolated dataset splits (dev, val, test) with full metric and confusion matrix computation:
+
+```bash
+# Run held-out test split (60 examples across 15 semantic categories)
+jnaara eval --split test
+
+# Run development or validation splits
+jnaara eval --split dev
+jnaara eval --split val
+
+# Export evaluation metrics to Markdown or JSON
+jnaara eval --split test --output docs/evaluation.md --json-output output/evaluation_test.json
+```
+
 ### Other Commands
 
 ```bash
@@ -358,16 +399,25 @@ jnaara reset      # Reset database and start fresh
 - **Tier 1 (Deterministic)**: Handles obvious cases without LLM calls — same entity, same attribute, different quantitative values. No need to ask an LLM whether `$480M ≠ $412M`.
 - **Tier 2 (LLM Inference)**: For nuanced cases requiring semantic reasoning — cross-entity relationships, multi-fact logical incompatibilities, Sequence 3 challenges.
 
-### Decision Model
+### Decision Model with Epistemic Abstention
 
 Every incoming claim produces a first-class `Decision` record:
 
 ```
-NEW_BELIEF      — No prior belief exists
+NEW_BELIEF      — No prior belief exists; initializes first-time entity state
 UPDATE          — Temporal supersession of existing belief
-CONFLICT        — Contradiction detected, resolution required
-DISCARD_NOISE   — Irrelevant or low-confidence claim
+CONFLICT        — Contradiction detected, pluggable resolution strategy invoked
+ABSTAIN         — High epistemic uncertainty or unverified speculation held without mutating belief state
+DISCARD_NOISE   — Irrelevant or unparseable claim
 ```
+
+### Independent Evaluation & Transparent Metrics
+
+Rather than evaluating the system on author-constructed integration sequences with self-graded 100% claims, Jnaara implements an independent, partition-isolated evaluation framework:
+- **Separated Partitions**: Dev (20 examples), Val (15 examples), and Held-Out Test (60 examples) with automated leakage detection.
+- **Statistical Metrics**: Full reporting of TP, TN, FP, FN, Precision, Recall, Specificity, F1, Accuracy, and Confusion Matrix.
+- **Visible Failure Analysis**: Automatic categorization of false negatives and false positives across 10 diagnosed failure modes (e.g. subtle semantic inference, negation handling, temporal scope shifts).
+- **Deterministic Offline Reproducibility**: Evaluator runs out-of-the-box in mock mode without API keys or token expenditure, guaranteeing reproducible numbers across environments.
 
 ### Provenance Chain
 
@@ -412,14 +462,16 @@ All tests use `MockLLMProvider` — no live LLM calls required for the test suit
 - [x] Belief manager orchestration
 - [x] Provenance and audit trail
 - [x] Typer CLI (`ingest`, `beliefs`, `conflicts`, `provenance`, `strategy`, `summary`)
-- [x] 42 Unit and integration tests with 100% pass rate
-- [x] Sequence 1–3 benchmark accuracy validation (100%)
+- [x] 58 Unit, integration, abstention, and evaluation metrics tests with 100% pass rate
+- [x] Independent held-out evaluation runner with statistical metrics & failure diagnostics (`jnaara eval`)
+- [x] Epistemic uncertainty detection and `ABSTAIN` action handling
+- [x] Partition-isolated evaluation datasets (dev, val, test) covering 15 semantic categories with zero leakage
 
 ### Stretch & Production Additions
 
 - [x] FastAPI REST API with security rate limiter and CORS
 - [x] Interactive Svelte Web Dashboard with provenance trees & strategy switcher
-- [x] JSON evaluation report generation to `output/`
+- [x] JSON evaluation report generation to `output/` and Markdown to `docs/evaluation.md`
 - [x] LLM Rate Limiting, Inter-Fact Pacing & Exponential Backoff Retry
 
 ---

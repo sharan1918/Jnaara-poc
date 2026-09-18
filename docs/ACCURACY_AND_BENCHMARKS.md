@@ -1,10 +1,16 @@
-# Jnaara Belief Engine — Accuracy Analysis & Benchmark Evaluation
+# Jnaara Belief Engine — Integration Sequences Analysis
 
-This document provides a comprehensive evaluation of the Jnaara belief engine across all **5 dataset sequences (138 facts total)** from `docs/jnaara_memory_facts_dataset.json` spanning **15 enterprise entities**.
+> [!IMPORTANT]
+> **Methodology Clarification: Integration Narrative Sequences vs. Independent Evaluation Benchmark**
+>
+> This document analyzes the **5 End-to-End Narrative Integration Sequences** (138 facts across 15 enterprise entities) which were constructed to test sequential state transitions, temporal supersession, and strategy divergence.
+>
+> For the **independent, partition-isolated benchmark evaluation** reporting standard statistical metrics (Precision: 80.0%, Recall: 29.6%, F1: 43.2%, Specificity: 92.9%, False Positives: 2, False Negatives: 19) and failure mode diagnoses across 15 semantic categories on held-out test data, please refer to the primary evaluation document:
+> 👉 **[docs/evaluation.md](evaluation.md)**
 
 ---
 
-## 1. Executive Accuracy & Performance Scorecard
+## 1. Integration Sequences Scorecard
 
 | Sequence | Difficulty Level | Facts | Claims Extracted | Key Conflicts Tested | Conflict Detection Rate | Resolution Accuracy | Ground Truth Alignment |
 | :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
