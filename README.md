@@ -17,22 +17,25 @@ This is not a vector database or an LLM wrapper. It is a **memory system** that 
 3. Resolves conflicts using pluggable, deterministic strategies
 4. Maintains an auditable trail of every belief change
 
-### Independent Benchmark Evaluation (Honest Metrics)
+### Independent Benchmark Evaluation (Held-Out Test Partition)
 
-In accordance with rigorous evaluation methodology, Jnaara's conflict detection engine is evaluated against an independent, partition-isolated benchmark dataset (`held_out_test_set.json` with 60 examples across 15 semantic categories) with **zero data leakage**:
+In accordance with rigorous evaluation methodology, Jnaara's conflict detection engine is evaluated against an independent, partition-isolated benchmark dataset (`held_out_test_set.json` with 60 examples across 15 semantic categories) with **zero data leakage**. 
 
-| Metric | Score | Details / Ground Truth Counts |
-|:---|:---:|:---|
-| **Overall Accuracy** | **60.0%** | 36 / 60 total correct predictions |
-| **Precision** | **80.0%** | $\frac{TP}{TP + FP} = \frac{8}{8 + 2}$ (High trust when contradiction flagged) |
-| **Recall (Sensitivity)** | **29.6%** | $\frac{TP}{TP + FN} = \frac{8}{8 + 19}$ (Conservative detection on subtle inference) |
-| **F1 Score** | **43.2%** | Harmonic mean balancing precision and recall |
-| **Specificity** | **92.9%** | $\frac{TN}{TN + FP} = \frac{26}{26 + 2}$ (Low false alarm rate on non-contradictions) |
-| **False Positives (FP)** | **2** | False alarms on nuanced non-contradictions |
-| **False Negatives (FN)** | **19** | Subtly phrased or implicit contradictions missed |
-| **Abstention Accuracy** | **40.0%** | 2 / 5 unconfirmed rumors held for verification |
+Below are the empirical results comparing the **Deterministic Offline Mock Baseline** against the **Live LLM Provider** (`openai/gpt-oss-120b` via Groq):
 
-👉 **Full Evaluation Report & Failure Mode Analysis:** [docs/evaluation.md](docs/evaluation.md)
+| Metric | Offline Heuristic Mock | **Live LLM (`Live LLM (groq)`)** | Change / Impact |
+|:---|:---:|:---:|:---|
+| **Recall (Sensitivity)** | 29.6% ($8/27$) | **85.2%** ($23/27$) | **+55.6%** (Complex semantic contradictions caught) |
+| **Precision** | **80.0%** ($8/10$) | **79.3%** ($23/29$) | Maintained high signal reliability |
+| **F1 Score** | 43.2% | **82.1%** | Balanced harmonic performance nearly doubled |
+| **Overall Accuracy** | 60.0% ($36/60$) | **80.0%** ($48/60$) | $+20.0\%$ decision accuracy across 15 categories |
+| **Specificity** | **92.9%** ($26/28$) | **80.0%** ($24/30$) | True negative rate on non-contradictions |
+| **False Negatives (Misses)** | 19 | **4** | Missed contradictions dropped from 19 down to 4 |
+| **False Positives (Alarms)** | **2** | 6 | Minor trade-off: heightened sensitivity on edge cases |
+| **Abstention Accuracy** | **40.0%** ($2/5$) | 20.0% ($1/5$) | Cautious identification of unverified rumors |
+
+👉 **Full Live Provider Evaluation Report:** [docs/evaluation_live.md](docs/evaluation_live.md)  
+👉 **Offline Heuristic Baseline Report:** [docs/evaluation.md](docs/evaluation.md)
 
 ---
 
